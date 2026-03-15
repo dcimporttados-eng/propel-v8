@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Bike, Dumbbell, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
 import cardSprintBike from "@/assets/card-sprint-bike.jpg";
 import cardFuncional from "@/assets/card-funcional.jpg";
