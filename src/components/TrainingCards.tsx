@@ -81,10 +81,11 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
                 </div>
 
                 <Button
-                  onClick={() => onScheduleClick(mod.title)}
-                  className="w-full bg-gradient-primary text-primary-foreground font-semibold rounded-full hover:scale-[1.02] transition-transform"
+                  onClick={() => mod.title === "Sprint Bike" && onScheduleClick(mod.title)}
+                  disabled={mod.title !== "Sprint Bike"}
+                  className="w-full bg-gradient-primary text-primary-foreground font-semibold rounded-full hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  Ver horários
+                  {mod.title === "Sprint Bike" ? "Ver horários" : "Em breve"}
                 </Button>
               </div>
             </motion.div>
