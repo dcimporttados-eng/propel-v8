@@ -49,7 +49,6 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
             transition={{
               duration: 1.5,
               ease: [0.16, 1, 0.3, 1],
-              exit: { duration: 1.2, ease: "easeInOut" },
             }}
             className="relative z-10"
           >
