@@ -7,21 +7,18 @@ import cardPerformance from "@/assets/card-performance.jpg";
 
 const modalities = [
   {
-    icon: Bike,
     title: "Sprint Bike",
     description: "Treino de alta intensidade em bicicleta indoor focado em explosão, resistência e alto gasto calórico.",
     slots: 8,
     image: cardSprintBike,
   },
   {
-    icon: Dumbbell,
     title: "Treinamento Funcional",
     description: "Exercícios com peso corporal e acessórios para melhorar força, mobilidade e condicionamento físico.",
     slots: 12,
     image: cardFuncional,
   },
   {
-    icon: Zap,
     title: "Performance Training",
     description: "Treinamento avançado para quem busca evolução física e alto desempenho.",
     slots: 6,
