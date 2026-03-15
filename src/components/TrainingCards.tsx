@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Button } from "@/components/ui/button";
 import cardSprintBike from "@/assets/card-sprint-bike.jpg";
 import cardFuncional from "@/assets/card-funcional.jpg";
 import cardPerformance from "@/assets/card-performance.jpg";
