@@ -91,6 +91,7 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
               >
                 Ver horários
               </Button>
+              </div>
             </motion.div>
           ))}
         </div>
