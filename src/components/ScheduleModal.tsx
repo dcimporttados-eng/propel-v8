@@ -7,7 +7,7 @@ import { Check, Clock, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
-const modalities = ["Sprint Bike", "Treinamento Funcional", "Performance Training"];
+const modalities = ["Sprint Bike"];
 
 const scheduleData: Record<string, { time: string; slots: number }[]> = {
   "Sprint Bike": [
