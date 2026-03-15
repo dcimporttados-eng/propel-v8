@@ -1,6 +1,9 @@
 import { motion } from "framer-motion";
 import { Bike, Dumbbell, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import cardSprintBike from "@/assets/card-sprint-bike.jpg";
+import cardFuncional from "@/assets/card-funcional.jpg";
+import cardPerformance from "@/assets/card-performance.jpg";
 
 const modalities = [
   {
@@ -8,18 +11,21 @@ const modalities = [
     title: "Sprint Bike",
     description: "Treino de alta intensidade em bicicleta indoor focado em explosão, resistência e alto gasto calórico.",
     slots: 8,
+    image: cardSprintBike,
   },
   {
     icon: Dumbbell,
     title: "Treinamento Funcional",
     description: "Exercícios com peso corporal e acessórios para melhorar força, mobilidade e condicionamento físico.",
     slots: 12,
+    image: cardFuncional,
   },
   {
     icon: Zap,
     title: "Performance Training",
     description: "Treinamento avançado para quem busca evolução física e alto desempenho.",
     slots: 6,
+    image: cardPerformance,
   },
 ];
 
@@ -53,8 +59,16 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.15 }}
               whileHover={{ y: -8, scale: 1.02 }}
-              className="bg-card rounded-2xl p-8 shadow-card border border-border hover:border-primary/40 transition-all duration-300 group"
+              className="bg-card rounded-2xl overflow-hidden shadow-card border border-border hover:border-primary/40 transition-all duration-300 group"
             >
+              <div className="w-full h-40 overflow-hidden">
+                <img
+                  src={mod.image}
+                  alt={mod.title}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+              </div>
+              <div className="p-8">
               <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors">
                 <mod.icon className="w-7 h-7 text-primary" />
               </div>
@@ -77,6 +91,7 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
               >
                 Ver horários
               </Button>
+              </div>
             </motion.div>
           ))}
         </div>
