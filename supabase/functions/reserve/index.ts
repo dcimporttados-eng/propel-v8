@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { class_id, name, email, phone } = await req.json();
+    const { class_id, class_date, name, email, phone } = await req.json();
 
     if (!class_id || !name || !email || !phone) {
       return new Response(
@@ -25,10 +25,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check available spots
-    const { data: spots, error: spotsError } = await supabase.rpc("get_available_spots", {
-      p_class_id: class_id,
-    });
+    // Check available spots (with date if provided)
+    const rpcParams: Record<string, unknown> = { p_class_id: class_id };
+    if (class_date) rpcParams.p_date = class_date;
+
+    const { data: spots, error: spotsError } = await supabase.rpc("get_available_spots", rpcParams);
 
     if (spotsError) throw new Error(`Erro ao verificar vagas: ${spotsError.message}`);
     if (spots <= 0) {
@@ -74,9 +75,12 @@ Deno.serve(async (req) => {
     }
 
     // Create reservation (pending)
+    const reservationData: Record<string, unknown> = { user_id: userId, class_id, status: "pending" };
+    if (class_date) reservationData.class_date = class_date;
+
     const { data: reservation, error: resError } = await supabase
       .from("reservations")
-      .insert({ user_id: userId, class_id, status: "pending" })
+      .insert(reservationData)
       .select("id")
       .single();
 

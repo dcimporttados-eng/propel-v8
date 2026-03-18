@@ -14,12 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      class_suspensions: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          suspended_date: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          suspended_date: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          suspended_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_suspensions_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       classes: {
         Row: {
           capacity: number
           checkout_url: string | null
           created_at: string
-          date: string
+          date: string | null
+          day_of_week: number | null
           id: string
           price: number
           time: string
@@ -29,7 +59,8 @@ export type Database = {
           capacity?: number
           checkout_url?: string | null
           created_at?: string
-          date: string
+          date?: string | null
+          day_of_week?: number | null
           id?: string
           price?: number
           time: string
@@ -39,7 +70,8 @@ export type Database = {
           capacity?: number
           checkout_url?: string | null
           created_at?: string
-          date?: string
+          date?: string | null
+          day_of_week?: number | null
           id?: string
           price?: number
           time?: string
@@ -103,6 +135,7 @@ export type Database = {
       }
       reservations: {
         Row: {
+          class_date: string | null
           class_id: string
           created_at: string
           id: string
@@ -111,6 +144,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          class_date?: string | null
           class_id: string
           created_at?: string
           id?: string
@@ -119,6 +153,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          class_date?: string | null
           class_id?: string
           created_at?: string
           id?: string
@@ -182,7 +217,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_available_spots: { Args: { p_class_id: string }; Returns: number }
+      get_available_spots:
+        | { Args: { p_class_id: string }; Returns: number }
+        | { Args: { p_class_id: string; p_date?: string }; Returns: number }
     }
     Enums: {
       payment_status: "pending" | "paid" | "failed"
