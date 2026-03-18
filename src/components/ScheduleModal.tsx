@@ -34,15 +34,17 @@ interface ScheduleModalProps {
   initialModality?: string;
 }
 
+const LAUNCH_DATE = new Date(2026, 2, 30); // March 30, 2026
+
 function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[] {
   const days: { date: string; dayOfWeek: number; label: string }[] = [];
   const now = new Date();
-  let d = new Date(now);
+  // Start from today or launch date, whichever is later
+  const start = now >= LAUNCH_DATE ? now : LAUNCH_DATE;
   
-  // Start from today or tomorrow based on current time
-  for (let i = 0; i < 14 && days.length < 6; i++) {
-    const candidate = new Date(d);
-    candidate.setDate(d.getDate() + i);
+  for (let i = 0; days.length < 15; i++) {
+    const candidate = new Date(start);
+    candidate.setDate(start.getDate() + i);
     const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
     if (dow >= 1 && dow <= 6) {
       const yyyy = candidate.getFullYear();
