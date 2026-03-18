@@ -61,9 +61,12 @@ const ContactSection = () => {
 
         {/* Footer */}
         <div className="mt-20 pt-8 border-t border-border text-center">
-          <p className="text-sm text-muted-foreground">
-            © 2026 Pavilhão 8 — Centro de Treinamento. Todos os direitos reservados.
-          </p>
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              © 2026 Pavilhão 8 — Centro de Treinamento. Todos os direitos reservados.
+            </p>
+            <AdminDashboard />
+          </div>
         </div>
       </div>
     </section>
