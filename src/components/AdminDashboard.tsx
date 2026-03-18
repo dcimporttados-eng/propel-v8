@@ -167,7 +167,7 @@ const AdminDashboard = () => {
   const getTemplateName = (classId: string) => {
     const t = templates.find((t) => t.id === classId);
     if (!t) return "?";
-    const dayLabel = t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sex";
+    const dayLabel = t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb";
     return `${t.title} ${dayLabel} ${t.time?.slice(0, 5)}`;
   };
 
