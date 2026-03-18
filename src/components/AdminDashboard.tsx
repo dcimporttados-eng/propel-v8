@@ -115,7 +115,8 @@ const AdminDashboard = () => {
         capacity: newTemplate.capacity,
         price: newTemplate.price,
         day_of_week: newTemplate.day_of_week === 0 ? null : newTemplate.day_of_week,
-        date: null as unknown as string, // nullable now
+        instructor: newTemplate.instructor || null,
+        date: null as unknown as string,
         checkout_url: "https://pay.cakto.com.br/nkizirf_810528",
       })
       .select()
