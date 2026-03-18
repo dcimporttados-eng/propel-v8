@@ -62,7 +62,9 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [step, setStep] = useState(1);
   const [selectedOccurrence, setSelectedOccurrence] = useState<ClassOccurrence | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
-  const [occurrences, setOccurrences] = useState<Map<string, ClassOccurrence[]>>(new Map());
+  const [templates, setTemplates] = useState<ClassTemplate[]>([]);
+  const [suspSet, setSuspSet] = useState<Set<string>>(new Set());
+  const [reservationCounts, setReservationCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
@@ -77,53 +79,32 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       setWeekdays(days);
       if (days.length > 0) setSelectedDay(days[0].date);
 
-      // Fetch templates
-      const { data: templates } = await supabase
-        .from("classes")
-        .select("*")
-        .order("time", { ascending: true });
-
-      // Fetch suspensions for upcoming dates
       const dates = days.map((d) => d.date);
-      const { data: suspensions } = await supabase
-        .from("class_suspensions")
-        .select("*")
-        .in("suspended_date", dates);
 
-      const suspSet = new Set(
-        (suspensions || []).map((s: { class_id: string; suspended_date: string }) => `${s.class_id}_${s.suspended_date}`)
+      // Fetch templates, suspensions, and reservations in parallel
+      const [templatesRes, suspensionsRes, reservationsRes] = await Promise.all([
+        supabase.from("classes").select("*").order("time", { ascending: true }),
+        supabase.from("class_suspensions").select("*").in("suspended_date", dates),
+        supabase.from("reservations").select("class_id, class_date").in("status", ["pending", "confirmed"]).in("class_date", dates),
+      ]);
+
+      const allTemplates = ((templatesRes.data || []) as ClassTemplate[]).filter(
+        (t) => !initialModality || t.title === initialModality
       );
+      setTemplates(allTemplates);
 
-      // Generate occurrences per day
-      const occMap = new Map<string, ClassOccurrence[]>();
+      setSuspSet(new Set(
+        (suspensionsRes.data || []).map((s: { class_id: string; suspended_date: string }) => `${s.class_id}_${s.suspended_date}`)
+      ));
 
-      for (const day of days) {
-        const dayOccurrences: ClassOccurrence[] = [];
-        for (const t of (templates || []) as ClassTemplate[]) {
-          // Check if template applies to this day
-          if (t.day_of_week !== null && t.day_of_week !== day.dayOfWeek) continue;
-          // Check if suspended
-          if (suspSet.has(`${t.id}_${day.date}`)) continue;
-          // Filter by modality
-          if (initialModality && t.title !== initialModality) continue;
-
-          // Get available spots for this template+date
-          const { data: spots } = await supabase.rpc("get_available_spots", {
-            p_class_id: t.id,
-            p_date: day.date,
-          });
-
-          dayOccurrences.push({
-            template: t,
-            date: day.date,
-            dayOfWeek: day.dayOfWeek,
-            available: spots ?? t.capacity,
-          });
-        }
-        occMap.set(day.date, dayOccurrences);
+      // Count reservations per class+date
+      const counts = new Map<string, number>();
+      for (const r of (reservationsRes.data || []) as { class_id: string; class_date: string }[]) {
+        const key = `${r.class_id}_${r.class_date}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
       }
+      setReservationCounts(counts);
 
-      setOccurrences(occMap);
       setLoading(false);
     };
 
@@ -176,7 +157,25 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     }
   };
 
-  const currentDayOccurrences = occurrences.get(selectedDay) || [];
+  const currentDayOccurrences: ClassOccurrence[] = (() => {
+    const dayInfo = weekdays.find((d) => d.date === selectedDay);
+    if (!dayInfo) return [];
+    return templates
+      .filter((t) => {
+        if (t.day_of_week !== null && t.day_of_week !== dayInfo.dayOfWeek) return false;
+        if (suspSet.has(`${t.id}_${selectedDay}`)) return false;
+        return true;
+      })
+      .map((t) => {
+        const reserved = reservationCounts.get(`${t.id}_${selectedDay}`) || 0;
+        return {
+          template: t,
+          date: selectedDay,
+          dayOfWeek: dayInfo.dayOfWeek,
+          available: t.capacity - reserved,
+        };
+      });
+  })();
 
   const formattedPrice = selectedOccurrence
     ? (selectedOccurrence.template.price / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -210,22 +209,26 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               ) : (
                 <>
                   {/* Day selector - horizontal scroll */}
-                  <div className="relative -mx-2 px-2">
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
-                      {weekdays.map((day) => (
-                        <button
-                          key={day.date}
-                          onClick={() => setSelectedDay(day.date)}
-                          className={`flex-shrink-0 snap-start px-3 py-2 rounded-lg text-xs font-semibold transition-colors border whitespace-nowrap ${
-                            selectedDay === day.date
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
-                          }`}
-                        >
-                          <CalendarDays className="w-3 h-3 inline mr-1" />
-                          {day.label}
-                        </button>
-                      ))}
+                  <div className="overflow-x-auto scrollbar-hide -mx-6 px-6">
+                    <div className="flex gap-2 pb-2 w-max">
+                      {weekdays.map((day) => {
+                        const [dayName, dateStr] = day.label.split(" ");
+                        const shortDay = dayName.slice(0, 3);
+                        return (
+                          <button
+                            key={day.date}
+                            onClick={() => setSelectedDay(day.date)}
+                            className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors border min-w-[56px] ${
+                              selectedDay === day.date
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                            }`}
+                          >
+                            <span className="text-[10px] uppercase">{shortDay}</span>
+                            <span className="text-sm font-bold">{dateStr}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
