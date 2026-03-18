@@ -17,6 +17,7 @@ interface ClassTemplate {
   price: number;
   day_of_week: number | null;
   checkout_url: string | null;
+  instructor: string | null;
 }
 
 interface Suspension {
