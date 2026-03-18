@@ -102,3 +102,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(45 90% 50%);
 }
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
