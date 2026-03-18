@@ -34,7 +34,7 @@ const AdminDashboard = () => {
   const [suspensions, setSuspensions] = useState<Suspension[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0 });
+  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState<"templates" | "suspensions">("templates");
   const [suspendDate, setSuspendDate] = useState("");
