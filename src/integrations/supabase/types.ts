@@ -14,16 +14,176 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      classes: {
+        Row: {
+          capacity: number
+          created_at: string
+          date: string
+          id: string
+          price: number
+          time: string
+          title: string
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          date: string
+          id?: string
+          price?: number
+          time: string
+          title: string
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          date?: string
+          id?: string
+          price?: number
+          time?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          paid_at: string | null
+          pix_copy_paste: string | null
+          pix_qr_code: string | null
+          reservation_id: string
+          status: Database["public"]["Enums"]["payment_status"]
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          reservation_id: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          pix_copy_paste?: string | null
+          pix_qr_code?: string | null
+          reservation_id?: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          payment_id: string | null
+          status: Database["public"]["Enums"]["reservation_status"]
+          user_id: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          status?: Database["public"]["Enums"]["reservation_status"]
+          user_id: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          status?: Database["public"]["Enums"]["reservation_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_payment"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          auth_id: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          phone: string | null
+        }
+        Insert: {
+          auth_id?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          phone?: string | null
+        }
+        Update: {
+          auth_id?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_available_spots: { Args: { p_class_id: string }; Returns: number }
     }
     Enums: {
-      [_ in never]: never
+      payment_status: "pending" | "paid" | "failed"
+      reservation_status: "pending" | "confirmed" | "canceled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +310,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      payment_status: ["pending", "paid", "failed"],
+      reservation_status: ["pending", "confirmed", "canceled"],
+    },
   },
 } as const
