@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 interface ClassTemplate {
   id: string;
