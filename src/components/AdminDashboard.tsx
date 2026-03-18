@@ -124,7 +124,7 @@ const AdminDashboard = () => {
     if (error) toast.error("Erro: " + error.message);
     else if (data) {
       setTemplates((prev) => [...prev, data as ClassTemplate]);
-      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0 });
+      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
       toast.success("Horário criado!");
     }
     setAdding(false);
