@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, Clock, Users, Loader2 } from "lucide-react";
+import { Check, Clock, Users, Loader2, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import PaymentStep from "./PaymentStep";
 
 interface ClassSlot {
   id: string;
@@ -16,6 +15,7 @@ interface ClassSlot {
   time: string;
   capacity: number;
   price: number;
+  checkout_url: string | null;
   available?: number;
 }
 
@@ -31,13 +31,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
   const [classes, setClasses] = useState<ClassSlot[]>([]);
   const [loading, setLoading] = useState(false);
-  const [paymentData, setPaymentData] = useState<{
-    pixQrCode: string;
-    pixCopyPaste: string;
-    amount: number;
-    paymentId: string;
-    reservationId: string;
-  } | null>(null);
 
   // Fetch classes from DB
   useEffect(() => {
@@ -55,32 +48,25 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
         return;
       }
 
-      // Get available spots for each class
       const classesWithSpots = await Promise.all(
         (data || []).map(async (cls) => {
           const { data: spots } = await supabase.rpc("get_available_spots", {
             p_class_id: cls.id,
           });
-          return { ...cls, available: spots ?? cls.capacity };
+          return { ...cls, available: spots ?? cls.capacity } as ClassSlot;
         })
       );
 
       setClasses(classesWithSpots);
-
-      // Auto-advance if initialModality is set
-      if (initialModality) {
-        setStep(1); // Show time selection directly
-      }
     };
 
     fetchClasses();
-  }, [open, initialModality]);
+  }, [open]);
 
   const resetAndClose = () => {
     setStep(1);
     setSelectedClass(null);
     setForm({ name: "", phone: "", email: "" });
-    setPaymentData(null);
     onOpenChange(false);
   };
 
@@ -107,14 +93,13 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      setPaymentData({
-        pixQrCode: data.pix_qr_code || "",
-        pixCopyPaste: data.pix_copy_paste || "",
-        amount: data.amount,
-        paymentId: data.payment_id,
-        reservationId: data.reservation_id,
-      });
-      setStep(3);
+      // Redirect to Cakto checkout
+      if (data.checkout_url) {
+        window.open(data.checkout_url, "_blank");
+        setStep(3);
+      } else {
+        throw new Error("URL de checkout não disponível");
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao criar reserva";
       toast.error(message);
@@ -122,11 +107,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       setLoading(false);
     }
   };
-
-  const handlePaymentConfirmed = useCallback(() => {
-    setStep(4);
-    toast.success("Pagamento confirmado! Sua vaga está garantida.");
-  }, []);
 
   const handleOpenChange = (v: boolean) => {
     if (!v) resetAndClose();
@@ -137,6 +117,10 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     ? classes.filter((c) => c.title === initialModality)
     : classes;
 
+  const formattedPrice = selectedClass
+    ? (selectedClass.price / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+    : "";
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-card border-border sm:max-w-md">
@@ -144,14 +128,13 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           <DialogTitle className="text-xl font-bold">
             {step === 1 && (initialModality || "Escolha o horário")}
             {step === 2 && "Seus dados"}
-            {step === 3 && "Pagamento PIX"}
-            {step === 4 && "Reserva confirmada!"}
+            {step === 3 && "Finalize o pagamento"}
           </DialogTitle>
         </DialogHeader>
 
         {/* Progress */}
         <div className="flex gap-1 mb-4">
-          {[1, 2, 3, 4].map((s) => (
+          {[1, 2, 3].map((s) => (
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-colors ${
@@ -200,7 +183,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           {step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <p className="text-sm text-muted-foreground mb-4">
-                {selectedClass?.title} — {selectedClass?.time?.slice(0, 5)}
+                {selectedClass?.title} — {selectedClass?.time?.slice(0, 5)} — {formattedPrice}
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -223,7 +206,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   {loading ? (
                     <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</>
                   ) : (
-                    "Reservar e pagar"
+                    <>Reservar e pagar <ExternalLink className="w-4 h-4 ml-2" /></>
                   )}
                 </Button>
                 <Button variant="ghost" type="button" onClick={() => setStep(1)} className="text-muted-foreground text-sm w-full">
@@ -233,28 +216,22 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
             </motion.div>
           )}
 
-          {step === 3 && paymentData && (
-            <PaymentStep
-              pixQrCode={paymentData.pixQrCode}
-              pixCopyPaste={paymentData.pixCopyPaste}
-              amount={paymentData.amount}
-              paymentId={paymentData.paymentId}
-              reservationId={paymentData.reservationId}
-              onConfirmed={handlePaymentConfirmed}
-            />
-          )}
-
-          {step === 4 && (
-            <motion.div key="step4" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
+          {step === 3 && (
+            <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
                 <Check className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-bold mb-2">Pagamento confirmado!</h3>
-              <p className="text-muted-foreground text-sm mb-1">Sua vaga está garantida</p>
-              <p className="text-muted-foreground text-sm mb-6">
+              <h3 className="text-lg font-bold mb-2">Reserva criada!</h3>
+              <p className="text-muted-foreground text-sm mb-1">
+                Complete o pagamento na página que abriu.
+              </p>
+              <p className="text-muted-foreground text-sm mb-4">
                 {selectedClass?.title} — {selectedClass?.time?.slice(0, 5)}
               </p>
-              <Button onClick={resetAndClose} className="bg-gradient-primary text-primary-foreground rounded-full px-8">
+              <p className="text-xs text-muted-foreground mb-6">
+                Sua vaga será confirmada automaticamente após o pagamento.
+              </p>
+              <Button onClick={resetAndClose} variant="outline" className="rounded-full px-8">
                 Fechar
               </Button>
             </motion.div>

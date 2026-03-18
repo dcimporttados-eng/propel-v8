@@ -6,19 +6,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PAGARME_API_URL = "https://api.pagar.me/core/v5";
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const PAGARME_SECRET_KEY = Deno.env.get("PAGARME_SECRET_KEY");
-    if (!PAGARME_SECRET_KEY) {
-      throw new Error("PAGARME_SECRET_KEY is not configured");
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -45,7 +38,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get class info
+    // Get class info (including checkout_url)
     const { data: classData, error: classError } = await supabase
       .from("classes")
       .select("*")
@@ -53,6 +46,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (classError || !classData) throw new Error("Aula não encontrada");
+
+    if (!classData.checkout_url) {
+      throw new Error("Checkout não configurado para esta aula");
+    }
 
     // Create or find user
     const { data: existingUser } = await supabase
@@ -64,6 +61,8 @@ Deno.serve(async (req) => {
     let userId: string;
     if (existingUser) {
       userId = existingUser.id;
+      // Update name/phone if changed
+      await supabase.from("users").update({ name, phone }).eq("id", userId);
     } else {
       const { data: newUser, error: userError } = await supabase
         .from("users")
@@ -83,91 +82,17 @@ Deno.serve(async (req) => {
 
     if (resError || !reservation) throw new Error(`Erro ao criar reserva: ${resError?.message}`);
 
-    // Create PIX payment via Pagar.me
-    const pagarmeAuth = btoa(`${PAGARME_SECRET_KEY}:`);
-
-    const pagarmeResponse = await fetch(`${PAGARME_API_URL}/orders`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${pagarmeAuth}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: [
-          {
-            amount: classData.price,
-            description: `${classData.title} - ${classData.date} ${classData.time}`,
-            quantity: 1,
-          },
-        ],
-        customer: {
-          name,
-          email,
-          type: "individual",
-        },
-        payments: [
-          {
-            payment_method: "pix",
-            pix: {
-              expires_in: 3600,
-            },
-          },
-        ],
-        metadata: {
-          reservation_id: reservation.id,
-        },
-      }),
-    });
-
-    const pagarmeData = await pagarmeResponse.json();
-
-    if (!pagarmeResponse.ok) {
-      // Cancel reservation if payment creation fails
-      await supabase
-        .from("reservations")
-        .update({ status: "canceled" })
-        .eq("id", reservation.id);
-      throw new Error(`Erro Pagar.me [${pagarmeResponse.status}]: ${JSON.stringify(pagarmeData)}`);
-    }
-
-    // Extract PIX data
-    const charge = pagarmeData.charges?.[0];
-    const lastTransaction = charge?.last_transaction;
-    const pixQrCode = lastTransaction?.qr_code_url || lastTransaction?.qr_code;
-    const pixCopyPaste = lastTransaction?.qr_code || "";
-    const transactionId = charge?.id || pagarmeData.id;
-
-    // Create payment record
-    const { data: payment, error: payError } = await supabase
-      .from("payments")
-      .insert({
-        user_id: userId,
-        reservation_id: reservation.id,
-        amount: classData.price,
-        status: "pending",
-        transaction_id: String(transactionId),
-        pix_qr_code: pixQrCode,
-        pix_copy_paste: pixCopyPaste,
-      })
-      .select("id")
-      .single();
-
-    if (payError || !payment) throw new Error(`Erro ao criar pagamento: ${payError?.message}`);
-
-    // Link payment to reservation
-    await supabase
-      .from("reservations")
-      .update({ payment_id: payment.id })
-      .eq("id", reservation.id);
+    // Build checkout URL with reservation context
+    // Append email and reservation_id as query params so we can match on webhook
+    const checkoutUrl = new URL(classData.checkout_url);
+    checkoutUrl.searchParams.set("email", email);
+    checkoutUrl.searchParams.set("src", reservation.id);
 
     return new Response(
       JSON.stringify({
         reservation_id: reservation.id,
-        payment_id: payment.id,
-        pix_qr_code: pixQrCode,
-        pix_copy_paste: pixCopyPaste,
-        amount: classData.price,
-        expires_in: 3600,
+        checkout_url: checkoutUrl.toString(),
+        class_title: classData.title,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
