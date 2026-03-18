@@ -17,6 +17,7 @@ export type Database = {
       classes: {
         Row: {
           capacity: number
+          checkout_url: string | null
           created_at: string
           date: string
           id: string
@@ -26,6 +27,7 @@ export type Database = {
         }
         Insert: {
           capacity?: number
+          checkout_url?: string | null
           created_at?: string
           date: string
           id?: string
@@ -35,6 +37,7 @@ export type Database = {
         }
         Update: {
           capacity?: number
+          checkout_url?: string | null
           created_at?: string
           date?: string
           id?: string
