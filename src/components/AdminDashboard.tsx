@@ -7,7 +7,7 @@ import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle } from "lucide-reac
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 interface ClassTemplate {
   id: string;
