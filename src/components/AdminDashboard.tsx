@@ -285,8 +285,8 @@ const AdminDashboard = () => {
                             onChange={(e) => setNewTemplate({ ...newTemplate, day_of_week: parseInt(e.target.value) })}
                             className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm"
                           >
-                            <option value={0}>Todos (Seg-Sex)</option>
-                            {[1, 2, 3, 4, 5].map((d) => (
+                            <option value={0}>Todos (Seg-Sáb)</option>
+                            {[1, 2, 3, 4, 5, 6].map((d) => (
                               <option key={d} value={d}>{DAY_NAMES[d]}</option>
                             ))}
                           </select>
