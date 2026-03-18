@@ -247,6 +247,9 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                         <div className="text-left">
                           <span className="font-semibold">{occ.template.time?.slice(0, 5)}</span>
                           <span className="text-xs text-muted-foreground ml-2">{occ.template.title}</span>
+                          {occ.template.instructor && (
+                            <p className="text-xs text-primary/80">Prof. {occ.template.instructor}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
