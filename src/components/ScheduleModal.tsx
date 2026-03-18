@@ -117,8 +117,19 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setSelectedOccurrence(null);
     setForm({ name: "", phone: "", email: "" });
     setSelectedDay("");
+    setWeekIndex(0);
     onOpenChange(false);
   };
+
+  // Split weekdays into weeks of 6 (Mon-Sat)
+  const weeks: typeof weekdays[] = [];
+  for (let i = 0; i < weekdays.length; i += 6) {
+    weeks.push(weekdays.slice(i, i + 6));
+  }
+  const currentWeek = weeks[weekIndex] || [];
+  const weekLabel = currentWeek.length > 0
+    ? `Semana ${weekIndex + 1} de ${weeks.length}`
+    : "";
 
   const handleSelectTime = (occ: ClassOccurrence) => {
     setSelectedOccurrence(occ);
