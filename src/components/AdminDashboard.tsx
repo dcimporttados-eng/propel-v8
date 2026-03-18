@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle } from "lucide-react";
+import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -26,19 +26,38 @@ interface Suspension {
   suspended_date: string;
 }
 
+interface Reservation {
+  id: string;
+  class_id: string;
+  class_date: string | null;
+  status: string;
+  created_at: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  user_phone?: string;
+  class_title?: string;
+  class_time?: string;
+}
+
 const AdminDashboard = () => {
   const [open, setOpen] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [templates, setTemplates] = useState<ClassTemplate[]>([]);
   const [suspensions, setSuspensions] = useState<Suspension[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
+  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
   const [adding, setAdding] = useState(false);
-  const [activeTab, setActiveTab] = useState<"templates" | "suspensions">("templates");
+  const [activeTab, setActiveTab] = useState<"templates" | "suspensions" | "reservations">("templates");
   const [suspendDate, setSuspendDate] = useState("");
   const [suspendClassId, setSuspendClassId] = useState("");
+  const [filterDate, setFilterDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
@@ -72,6 +91,53 @@ const AdminDashboard = () => {
     setLoading(false);
   };
 
+  const fetchReservations = async () => {
+    const { data: resData } = await supabase
+      .from("reservations")
+      .select("*")
+      .eq("class_date", filterDate)
+      .in("status", ["pending", "confirmed"])
+      .order("created_at", { ascending: false });
+
+    if (!resData || resData.length === 0) {
+      setReservations([]);
+      return;
+    }
+
+    // Get user and class info
+    const userIds = [...new Set(resData.map((r) => r.user_id))];
+    const classIds = [...new Set(resData.map((r) => r.class_id))];
+
+    const [usersRes, classesRes] = await Promise.all([
+      supabase.from("users").select("id, name, email, phone").in("id", userIds),
+      supabase.from("classes").select("id, title, time").in("id", classIds),
+    ]);
+
+    const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
+    const classesMap = new Map((classesRes.data || []).map((c) => [c.id, c]));
+
+    const enriched: Reservation[] = resData.map((r) => {
+      const user = usersMap.get(r.user_id);
+      const cls = classesMap.get(r.class_id);
+      return {
+        ...r,
+        user_name: user?.name || "?",
+        user_email: user?.email || "?",
+        user_phone: user?.phone || "",
+        class_title: cls?.title || "?",
+        class_time: cls?.time?.slice(0, 5) || "?",
+      };
+    });
+
+    setReservations(enriched);
+  };
+
+  useEffect(() => {
+    if (authenticated && activeTab === "reservations") {
+      fetchReservations();
+    }
+  }, [authenticated, activeTab, filterDate]);
+
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
     const { error } = await supabase
@@ -83,6 +149,7 @@ const AdminDashboard = () => {
         price: t.price,
         day_of_week: t.day_of_week,
         instructor: t.instructor,
+        checkout_url: t.checkout_url,
       })
       .eq("id", t.id);
     if (error) toast.error("Erro: " + error.message);
@@ -116,18 +183,31 @@ const AdminDashboard = () => {
         price: newTemplate.price,
         day_of_week: newTemplate.day_of_week === 0 ? null : newTemplate.day_of_week,
         instructor: newTemplate.instructor || null,
+        checkout_url: newTemplate.checkout_url || null,
         date: null as unknown as string,
-        checkout_url: "https://pay.cakto.com.br/nkizirf_810528",
       })
       .select()
       .single();
     if (error) toast.error("Erro: " + error.message);
     else if (data) {
       setTemplates((prev) => [...prev, data as ClassTemplate]);
-      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
+      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
       toast.success("Horário criado!");
     }
     setAdding(false);
+  };
+
+  const handleCancelReservation = async (resId: string) => {
+    if (!confirm("Cancelar esta reserva?")) return;
+    const { error } = await supabase
+      .from("reservations")
+      .update({ status: "canceled" })
+      .eq("id", resId);
+    if (error) toast.error("Erro: " + error.message);
+    else {
+      setReservations((prev) => prev.filter((r) => r.id !== resId));
+      toast.success("Reserva cancelada!");
+    }
   };
 
   const handleSuspend = async (e: React.FormEvent) => {
@@ -211,6 +291,9 @@ const AdminDashboard = () => {
                 <Button variant={activeTab === "suspensions" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("suspensions")} className="rounded-full text-xs">
                   Suspensões
                 </Button>
+                <Button variant={activeTab === "reservations" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("reservations")} className="rounded-full text-xs">
+                  <Users className="w-3.5 h-3.5 mr-1" /> Reservas
+                </Button>
               </div>
 
               {activeTab === "templates" && (
@@ -257,6 +340,10 @@ const AdminDashboard = () => {
                           <Label className="text-xs text-muted-foreground">Preço (centavos)</Label>
                           <Input type="number" min={0} value={t.price} onChange={(e) => updateTemplate(t.id, "price", parseInt(e.target.value) || 0)} className="bg-background border-border mt-1 h-9 text-sm" />
                         </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
+                        <Input value={t.checkout_url || ""} onChange={(e) => updateTemplate(t.id, "checkout_url", e.target.value)} placeholder="https://pay.cakto.com.br/..." className="bg-background border-border mt-1 h-9 text-sm" />
                       </div>
                       <div className="flex gap-2 justify-end">
                         <Button size="sm" variant="destructive" onClick={() => handleDelete(t.id)} className="h-8 px-3 text-xs">
@@ -311,6 +398,10 @@ const AdminDashboard = () => {
                           <Label className="text-xs text-muted-foreground">Preço (centavos)</Label>
                           <Input type="number" min={0} value={newTemplate.price} onChange={(e) => setNewTemplate({ ...newTemplate, price: parseInt(e.target.value) || 0 })} className="bg-secondary border-border mt-1 h-9 text-sm" />
                         </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
+                        <Input value={newTemplate.checkout_url} onChange={(e) => setNewTemplate({ ...newTemplate, checkout_url: e.target.value })} placeholder="https://pay.cakto.com.br/..." className="bg-secondary border-border mt-1 h-9 text-sm" />
                       </div>
                       <Button type="submit" disabled={adding} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full h-10">
                         {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Adicionar Horário"}
@@ -372,6 +463,47 @@ const AdminDashboard = () => {
                           </Button>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "reservations" && (
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">Veja os alunos inscritos por dia. Filtre pela data.</p>
+
+                  <div className="flex items-center gap-3">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Data:</Label>
+                    <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-secondary border-border h-9 text-sm max-w-[180px]" />
+                  </div>
+
+                  {reservations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Nenhuma reserva para esta data</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {reservations.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between p-3 bg-secondary rounded-xl border border-border">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                r.status === "confirmed" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
+                              }`}>
+                                {r.status === "confirmed" ? "Pago" : "Pendente"}
+                              </span>
+                              <span className="text-sm font-medium truncate">{r.user_name}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {r.class_title} {r.class_time} — {r.user_email} {r.user_phone && `— ${r.user_phone}`}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => handleCancelReservation(r.id)} className="h-7 px-2 text-xs text-destructive hover:text-destructive">
+                            <XCircle className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground text-center pt-2">
+                        {reservations.filter((r) => r.status === "confirmed").length} confirmadas · {reservations.filter((r) => r.status === "pending").length} pendentes
+                      </p>
                     </div>
                   )}
                 </div>

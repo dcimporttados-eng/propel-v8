@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -19,49 +19,49 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("Cakto webhook received:", JSON.stringify(body));
 
-    // Cakto sends event type in the payload
     const eventType = body.event || body.type || body.event_type;
+    const customerEmail = body.customer?.email || body.buyer?.email || body.email;
+    const transactionId = String(body.order?.id || body.transaction?.id || body.id || "");
+    // reservation_id passed via checkout URL ?src= param
+    const reservationId = body.src || body.reservation_id || null;
 
-    // We care about purchase_approved
     if (eventType === "purchase_approved") {
-      const customerEmail = body.customer?.email || body.buyer?.email || body.email;
-      const transactionId = String(body.order?.id || body.transaction?.id || body.id || "");
+      let reservation = null;
 
-      if (!customerEmail) {
-        console.error("No customer email in webhook payload");
-        return new Response(JSON.stringify({ received: true }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      // Strategy 1: Find by reservation_id (most reliable)
+      if (reservationId) {
+        const { data } = await supabase
+          .from("reservations")
+          .select("id, class_id, user_id")
+          .eq("id", reservationId)
+          .eq("status", "pending")
+          .maybeSingle();
+        reservation = data;
       }
 
-      // Find the user by email
-      const { data: user } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", customerEmail)
-        .maybeSingle();
+      // Strategy 2: Fallback to email lookup
+      if (!reservation && customerEmail) {
+        const { data: user } = await supabase
+          .from("users")
+          .select("id")
+          .eq("email", customerEmail)
+          .maybeSingle();
 
-      if (!user) {
-        console.error(`User not found for email: ${customerEmail}`);
-        return new Response(JSON.stringify({ received: true }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (user) {
+          const { data } = await supabase
+            .from("reservations")
+            .select("id, class_id, user_id")
+            .eq("user_id", user.id)
+            .eq("status", "pending")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          reservation = data;
+        }
       }
-
-      // Find pending reservation for this user (most recent)
-      const { data: reservation } = await supabase
-        .from("reservations")
-        .select("id, class_id")
-        .eq("user_id", user.id)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
 
       if (!reservation) {
-        console.error(`No pending reservation found for user ${user.id}`);
+        console.error("No pending reservation found for this payment");
         return new Response(JSON.stringify({ received: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       const { data: payment, error: payError } = await supabase
         .from("payments")
         .insert({
-          user_id: user.id,
+          user_id: reservation.user_id,
           reservation_id: reservation.id,
           amount: body.order?.amount || body.product?.price || 0,
           status: "paid",
@@ -96,6 +96,51 @@ Deno.serve(async (req) => {
         .eq("id", reservation.id);
 
       console.log(`Reservation ${reservation.id} confirmed via Cakto webhook`);
+    }
+
+    // Handle refund, chargeback, and cancellation
+    if (["purchase_refunded", "purchase_chargeback", "purchase_canceled"].includes(eventType)) {
+      let reservation = null;
+
+      if (reservationId) {
+        const { data } = await supabase
+          .from("reservations")
+          .select("id, user_id")
+          .eq("id", reservationId)
+          .in("status", ["pending", "confirmed"])
+          .maybeSingle();
+        reservation = data;
+      }
+
+      if (!reservation && transactionId) {
+        // Find by transaction_id in payments table
+        const { data: payment } = await supabase
+          .from("payments")
+          .select("reservation_id, user_id")
+          .eq("transaction_id", transactionId)
+          .maybeSingle();
+        
+        if (payment) {
+          reservation = { id: payment.reservation_id, user_id: payment.user_id };
+        }
+      }
+
+      if (reservation) {
+        await supabase
+          .from("reservations")
+          .update({ status: "canceled" })
+          .eq("id", reservation.id);
+
+        // Mark payment as failed
+        await supabase
+          .from("payments")
+          .update({ status: "failed" })
+          .eq("reservation_id", reservation.id);
+
+        console.log(`Reservation ${reservation.id} canceled due to ${eventType}`);
+      } else {
+        console.error(`No reservation found for ${eventType} event`);
+      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
