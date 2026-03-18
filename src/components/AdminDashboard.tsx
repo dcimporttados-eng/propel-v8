@@ -82,6 +82,7 @@ const AdminDashboard = () => {
         capacity: t.capacity,
         price: t.price,
         day_of_week: t.day_of_week,
+        instructor: t.instructor,
       })
       .eq("id", t.id);
     if (error) toast.error("Erro: " + error.message);
