@@ -157,7 +157,25 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     }
   };
 
-  const currentDayOccurrences = occurrences.get(selectedDay) || [];
+  const currentDayOccurrences: ClassOccurrence[] = (() => {
+    const dayInfo = weekdays.find((d) => d.date === selectedDay);
+    if (!dayInfo) return [];
+    return templates
+      .filter((t) => {
+        if (t.day_of_week !== null && t.day_of_week !== dayInfo.dayOfWeek) return false;
+        if (suspSet.has(`${t.id}_${selectedDay}`)) return false;
+        return true;
+      })
+      .map((t) => {
+        const reserved = reservationCounts.get(`${t.id}_${selectedDay}`) || 0;
+        return {
+          template: t,
+          date: selectedDay,
+          dayOfWeek: dayInfo.dayOfWeek,
+          available: t.capacity - reserved,
+        };
+      });
+  })();
 
   const formattedPrice = selectedOccurrence
     ? (selectedOccurrence.template.price / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
