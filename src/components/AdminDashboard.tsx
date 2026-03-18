@@ -339,7 +339,7 @@ const AdminDashboard = () => {
                           <option value="">Selecione...</option>
                           {templates.map((t) => (
                             <option key={t.id} value={t.id}>
-                              {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sex"})
+                              {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
                             </option>
                           ))}
                         </select>

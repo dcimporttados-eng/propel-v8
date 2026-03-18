@@ -44,7 +44,7 @@ function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[]
     const candidate = new Date(d);
     candidate.setDate(d.getDate() + i);
     const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
-    if (dow >= 1 && dow <= 5) {
+    if (dow >= 1 && dow <= 6) {
       const yyyy = candidate.getFullYear();
       const mm = String(candidate.getMonth() + 1).padStart(2, "0");
       const dd = String(candidate.getDate()).padStart(2, "0");
