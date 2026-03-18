@@ -29,18 +29,18 @@ const ContactSection = () => {
           className="grid md:grid-cols-3 gap-6 max-w-3xl mx-auto"
         >
           <a
-            href="https://instagram.com/pavilhao8"
+            href="https://www.instagram.com/pavilhao_8?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw=="
             target="_blank"
             rel="noopener noreferrer"
             className="flex flex-col items-center gap-3 p-8 bg-card rounded-2xl border border-border hover:border-primary/40 transition-colors group"
           >
             <Instagram className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
             <span className="font-semibold">Instagram</span>
-            <span className="text-sm text-muted-foreground">@pavilhao8</span>
+            <span className="text-sm text-muted-foreground">@pavilhao_8</span>
           </a>
 
           <a
-            href="https://wa.me/5500000000000"
+            href="https://wa.me/message/RTSICRSFMKA3D1"
             target="_blank"
             rel="noopener noreferrer"
             className="flex flex-col items-center gap-3 p-8 bg-card rounded-2xl border border-border hover:border-primary/40 transition-colors group"
