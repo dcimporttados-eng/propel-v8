@@ -75,9 +75,12 @@ Deno.serve(async (req) => {
     }
 
     // Create reservation (pending)
+    const reservationData: Record<string, unknown> = { user_id: userId, class_id, status: "pending" };
+    if (class_date) reservationData.class_date = class_date;
+
     const { data: reservation, error: resError } = await supabase
       .from("reservations")
-      .insert({ user_id: userId, class_id, status: "pending" })
+      .insert(reservationData)
       .select("id")
       .single();
 
