@@ -40,7 +40,7 @@ function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[]
   let d = new Date(now);
   
   // Start from today or tomorrow based on current time
-  for (let i = 0; i < 14 && days.length < 5; i++) {
+  for (let i = 0; i < 14 && days.length < 6; i++) {
     const candidate = new Date(d);
     candidate.setDate(d.getDate() + i);
     const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
