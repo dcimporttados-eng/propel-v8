@@ -209,22 +209,26 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               ) : (
                 <>
                   {/* Day selector - horizontal scroll */}
-                  <div className="relative -mx-2 px-2">
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
-                      {weekdays.map((day) => (
-                        <button
-                          key={day.date}
-                          onClick={() => setSelectedDay(day.date)}
-                          className={`flex-shrink-0 snap-start px-3 py-2 rounded-lg text-xs font-semibold transition-colors border whitespace-nowrap ${
-                            selectedDay === day.date
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
-                          }`}
-                        >
-                          <CalendarDays className="w-3 h-3 inline mr-1" />
-                          {day.label}
-                        </button>
-                      ))}
+                  <div className="overflow-x-auto scrollbar-hide -mx-6 px-6">
+                    <div className="flex gap-2 pb-2 w-max">
+                      {weekdays.map((day) => {
+                        const [dayName, dateStr] = day.label.split(" ");
+                        const shortDay = dayName.slice(0, 3);
+                        return (
+                          <button
+                            key={day.date}
+                            onClick={() => setSelectedDay(day.date)}
+                            className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors border min-w-[56px] ${
+                              selectedDay === day.date
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                            }`}
+                          >
+                            <span className="text-[10px] uppercase">{shortDay}</span>
+                            <span className="text-sm font-bold">{dateStr}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
