@@ -8,20 +8,20 @@ const modalities = [
   {
     title: "Sprint Bike",
     description: "Treino de alta intensidade em bicicleta indoor focado em explosão, resistência e alto gasto calórico.",
-    slots: 8,
     image: cardSprintBike,
+    available: true,
   },
   {
     title: "Treinamento Funcional",
     description: "Exercícios com peso corporal e acessórios para melhorar força, mobilidade e condicionamento físico.",
-    slots: 12,
     image: cardFuncional,
+    available: false,
   },
   {
     title: "Performance Training",
     description: "Treinamento avançado para quem busca evolução física e alto desempenho.",
-    slots: 6,
     image: cardPerformance,
+    available: false,
   },
 ];
 
@@ -57,16 +57,13 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
               whileHover={{ y: -8, scale: 1.02 }}
               className="relative rounded-2xl overflow-hidden shadow-card border border-border hover:border-primary/40 transition-all duration-300 group min-h-[360px] flex flex-col justify-end"
             >
-              {/* Background image */}
               <img
                 src={mod.image}
                 alt={mod.title}
                 className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               />
-              {/* Dark overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
 
-              {/* Content */}
               <div className="relative z-10 p-8">
                 <h3 className="text-xl font-bold mb-2 text-white">{mod.title}</h3>
                 <p className="text-white/70 text-sm leading-relaxed mb-4">
@@ -74,18 +71,25 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
                 </p>
 
                 <div className="flex items-center gap-2 mb-4">
-                  <div className={`w-2 h-2 rounded-full ${mod.slots > 0 ? "bg-green-500" : "bg-destructive"}`} />
-                  <span className="text-xs text-white/60">
-                    {mod.slots > 0 ? `${mod.slots} vagas restantes — 07:00` : "Aula Lotada"}
-                  </span>
+                  {mod.available ? (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-xs text-white/60">Vagas disponíveis — Seg a Sáb</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground" />
+                      <span className="text-xs text-white/40">Não disponível</span>
+                    </>
+                  )}
                 </div>
 
                 <Button
-                  onClick={() => mod.title === "Sprint Bike" && onScheduleClick(mod.title)}
-                  disabled={mod.title !== "Sprint Bike"}
+                  onClick={() => mod.available && onScheduleClick(mod.title)}
+                  disabled={!mod.available}
                   className="w-full bg-gradient-primary text-primary-foreground font-semibold rounded-full hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  {mod.title === "Sprint Bike" ? "Ver horários" : "Em breve"}
+                  {mod.available ? "Ver horários" : "Em breve"}
                 </Button>
               </div>
             </motion.div>
