@@ -40,7 +40,7 @@ const ContactSection = () => {
           </a>
 
           <a
-            href="https://wa.me/5500000000000"
+            href="https://wa.me/message/RTSICRSFMKA3D1"
             target="_blank"
             rel="noopener noreferrer"
             className="flex flex-col items-center gap-3 p-8 bg-card rounded-2xl border border-border hover:border-primary/40 transition-colors group"
