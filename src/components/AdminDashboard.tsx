@@ -238,11 +238,17 @@ const AdminDashboard = () => {
                           </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Horário</Label>
                           <Input type="time" value={t.time?.slice(0, 5)} onChange={(e) => updateTemplate(t.id, "time", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
                         </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Professora</Label>
+                          <Input value={t.instructor || ""} onChange={(e) => updateTemplate(t.id, "instructor", e.target.value)} placeholder="Nome da professora" className="bg-background border-border mt-1 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Vagas</Label>
                           <Input type="number" min={1} value={t.capacity} onChange={(e) => updateTemplate(t.id, "capacity", parseInt(e.target.value) || 1)} className="bg-background border-border mt-1 h-9 text-sm" />
