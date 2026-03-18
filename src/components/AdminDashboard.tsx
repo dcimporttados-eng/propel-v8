@@ -7,7 +7,7 @@ import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle } from "lucide-reac
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 interface ClassTemplate {
   id: string;
@@ -17,6 +17,7 @@ interface ClassTemplate {
   price: number;
   day_of_week: number | null;
   checkout_url: string | null;
+  instructor: string | null;
 }
 
 interface Suspension {
@@ -33,7 +34,7 @@ const AdminDashboard = () => {
   const [suspensions, setSuspensions] = useState<Suspension[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0 });
+  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState<"templates" | "suspensions">("templates");
   const [suspendDate, setSuspendDate] = useState("");
@@ -81,6 +82,7 @@ const AdminDashboard = () => {
         capacity: t.capacity,
         price: t.price,
         day_of_week: t.day_of_week,
+        instructor: t.instructor,
       })
       .eq("id", t.id);
     if (error) toast.error("Erro: " + error.message);
@@ -113,7 +115,8 @@ const AdminDashboard = () => {
         capacity: newTemplate.capacity,
         price: newTemplate.price,
         day_of_week: newTemplate.day_of_week === 0 ? null : newTemplate.day_of_week,
-        date: null as unknown as string, // nullable now
+        instructor: newTemplate.instructor || null,
+        date: null as unknown as string,
         checkout_url: "https://pay.cakto.com.br/nkizirf_810528",
       })
       .select()
@@ -121,7 +124,7 @@ const AdminDashboard = () => {
     if (error) toast.error("Erro: " + error.message);
     else if (data) {
       setTemplates((prev) => [...prev, data as ClassTemplate]);
-      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0 });
+      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 3000, day_of_week: 0, instructor: "" });
       toast.success("Horário criado!");
     }
     setAdding(false);
@@ -164,7 +167,7 @@ const AdminDashboard = () => {
   const getTemplateName = (classId: string) => {
     const t = templates.find((t) => t.id === classId);
     if (!t) return "?";
-    const dayLabel = t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sex";
+    const dayLabel = t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb";
     return `${t.title} ${dayLabel} ${t.time?.slice(0, 5)}`;
   };
 
@@ -212,7 +215,7 @@ const AdminDashboard = () => {
 
               {activeTab === "templates" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Configure os horários semanais. "Todos os dias" = Seg-Sex. Ou escolha um dia específico.</p>
+                  <p className="text-xs text-muted-foreground">Configure os horários semanais. "Todos os dias" = Seg-Sáb. Ou escolha um dia específico.</p>
 
                   {templates.map((t) => (
                     <div key={t.id} className="p-4 bg-secondary rounded-xl border border-border space-y-3">
@@ -228,18 +231,24 @@ const AdminDashboard = () => {
                             onChange={(e) => updateTemplate(t.id, "day_of_week", parseInt(e.target.value) || null)}
                             className="w-full h-9 mt-1 rounded-md border border-border bg-background px-3 text-sm"
                           >
-                            <option value={0}>Todos (Seg-Sex)</option>
-                            {[1, 2, 3, 4, 5].map((d) => (
+                            <option value={0}>Todos (Seg-Sáb)</option>
+                            {[1, 2, 3, 4, 5, 6].map((d) => (
                               <option key={d} value={d}>{DAY_NAMES[d]}</option>
                             ))}
                           </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Horário</Label>
                           <Input type="time" value={t.time?.slice(0, 5)} onChange={(e) => updateTemplate(t.id, "time", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
                         </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Professora</Label>
+                          <Input value={t.instructor || ""} onChange={(e) => updateTemplate(t.id, "instructor", e.target.value)} placeholder="Nome da professora" className="bg-background border-border mt-1 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Vagas</Label>
                           <Input type="number" min={1} value={t.capacity} onChange={(e) => updateTemplate(t.id, "capacity", parseInt(e.target.value) || 1)} className="bg-background border-border mt-1 h-9 text-sm" />
@@ -276,18 +285,24 @@ const AdminDashboard = () => {
                             onChange={(e) => setNewTemplate({ ...newTemplate, day_of_week: parseInt(e.target.value) })}
                             className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm"
                           >
-                            <option value={0}>Todos (Seg-Sex)</option>
-                            {[1, 2, 3, 4, 5].map((d) => (
+                            <option value={0}>Todos (Seg-Sáb)</option>
+                            {[1, 2, 3, 4, 5, 6].map((d) => (
                               <option key={d} value={d}>{DAY_NAMES[d]}</option>
                             ))}
                           </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Horário</Label>
                           <Input type="time" value={newTemplate.time} onChange={(e) => setNewTemplate({ ...newTemplate, time: e.target.value })} className="bg-secondary border-border mt-1 h-9 text-sm" required />
                         </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Professora</Label>
+                          <Input value={newTemplate.instructor} onChange={(e) => setNewTemplate({ ...newTemplate, instructor: e.target.value })} placeholder="Nome da professora" className="bg-secondary border-border mt-1 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Vagas</Label>
                           <Input type="number" min={1} value={newTemplate.capacity} onChange={(e) => setNewTemplate({ ...newTemplate, capacity: parseInt(e.target.value) || 1 })} className="bg-secondary border-border mt-1 h-9 text-sm" />
@@ -324,7 +339,7 @@ const AdminDashboard = () => {
                           <option value="">Selecione...</option>
                           {templates.map((t) => (
                             <option key={t.id} value={t.id}>
-                              {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sex"})
+                              {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
                             </option>
                           ))}
                         </select>

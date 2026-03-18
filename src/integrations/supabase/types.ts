@@ -51,6 +51,7 @@ export type Database = {
           date: string | null
           day_of_week: number | null
           id: string
+          instructor: string | null
           price: number
           time: string
           title: string
@@ -62,6 +63,7 @@ export type Database = {
           date?: string | null
           day_of_week?: number | null
           id?: string
+          instructor?: string | null
           price?: number
           time: string
           title: string
@@ -73,6 +75,7 @@ export type Database = {
           date?: string | null
           day_of_week?: number | null
           id?: string
+          instructor?: string | null
           price?: number
           time?: string
           title?: string

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 interface ClassTemplate {
   id: string;
@@ -18,6 +18,7 @@ interface ClassTemplate {
   price: number;
   day_of_week: number | null;
   checkout_url: string | null;
+  instructor: string | null;
 }
 
 interface ClassOccurrence {
@@ -39,11 +40,11 @@ function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[]
   let d = new Date(now);
   
   // Start from today or tomorrow based on current time
-  for (let i = 0; i < 14 && days.length < 5; i++) {
+  for (let i = 0; i < 14 && days.length < 6; i++) {
     const candidate = new Date(d);
     candidate.setDate(d.getDate() + i);
     const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
-    if (dow >= 1 && dow <= 5) {
+    if (dow >= 1 && dow <= 6) {
       const yyyy = candidate.getFullYear();
       const mm = String(candidate.getMonth() + 1).padStart(2, "0");
       const dd = String(candidate.getDate()).padStart(2, "0");
@@ -246,6 +247,9 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                         <div className="text-left">
                           <span className="font-semibold">{occ.template.time?.slice(0, 5)}</span>
                           <span className="text-xs text-muted-foreground ml-2">{occ.template.title}</span>
+                          {occ.template.instructor && (
+                            <p className="text-xs text-primary/80">Prof. {occ.template.instructor}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
