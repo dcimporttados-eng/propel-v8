@@ -24,7 +24,7 @@ const CTASection = ({ onScheduleClick }: CTASectionProps) => {
             <span className="text-gradient">evolução</span>?
           </h2>
           <p className="text-muted-foreground mb-8 max-w-md mx-auto relative z-10">
-            Agende sua aula experimental gratuita e descubra o que o Pavilhão 8 pode fazer pela sua
+            Agende sua aula e descubra o que o Pavilhão 8 pode fazer pela sua
             performance.
           </p>
           <Button
@@ -32,7 +32,7 @@ const CTASection = ({ onScheduleClick }: CTASectionProps) => {
             onClick={onScheduleClick}
             className="bg-gradient-primary text-primary-foreground font-bold text-lg px-10 py-6 rounded-full animate-pulse-glow hover:scale-105 transition-transform relative z-10"
           >
-            Agendar aula experimental
+            Agendar aula
           </Button>
         </motion.div>
       </div>

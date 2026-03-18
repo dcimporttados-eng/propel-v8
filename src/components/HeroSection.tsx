@@ -66,7 +66,7 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
             onClick={onScheduleClick}
             className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-full animate-pulse-glow hover:scale-105 transition-transform"
           >
-            Agendar Aula Experimental
+            Agendar Aula
           </Button>
           <Button
             size="lg"
