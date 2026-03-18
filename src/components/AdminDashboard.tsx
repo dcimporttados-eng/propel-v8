@@ -215,7 +215,7 @@ const AdminDashboard = () => {
 
               {activeTab === "templates" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Configure os horários semanais. "Todos os dias" = Seg-Sex. Ou escolha um dia específico.</p>
+                  <p className="text-xs text-muted-foreground">Configure os horários semanais. "Todos os dias" = Seg-Sáb. Ou escolha um dia específico.</p>
 
                   {templates.map((t) => (
                     <div key={t.id} className="p-4 bg-secondary rounded-xl border border-border space-y-3">
