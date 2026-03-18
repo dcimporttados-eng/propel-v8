@@ -292,11 +292,17 @@ const AdminDashboard = () => {
                           </select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Horário</Label>
                           <Input type="time" value={newTemplate.time} onChange={(e) => setNewTemplate({ ...newTemplate, time: e.target.value })} className="bg-secondary border-border mt-1 h-9 text-sm" required />
                         </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Professora</Label>
+                          <Input value={newTemplate.instructor} onChange={(e) => setNewTemplate({ ...newTemplate, instructor: e.target.value })} placeholder="Nome da professora" className="bg-secondary border-border mt-1 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Vagas</Label>
                           <Input type="number" min={1} value={newTemplate.capacity} onChange={(e) => setNewTemplate({ ...newTemplate, capacity: parseInt(e.target.value) || 1 })} className="bg-secondary border-border mt-1 h-9 text-sm" />
