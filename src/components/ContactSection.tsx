@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Instagram, MessageCircle, MapPin } from "lucide-react";
+import AdminDashboard from "./AdminDashboard";
 
 const ContactSection = () => {
   return (
