@@ -36,7 +36,7 @@ const ContactSection = () => {
           >
             <Instagram className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
             <span className="font-semibold">Instagram</span>
-            <span className="text-sm text-muted-foreground">@pavilhao8</span>
+            <span className="text-sm text-muted-foreground">@pavilhao_8</span>
           </a>
 
           <a
