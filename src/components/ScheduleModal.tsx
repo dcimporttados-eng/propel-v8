@@ -220,31 +220,48 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
               ) : (
                 <>
-                  {/* Day selector - horizontal scroll */}
-                  <div className="overflow-x-auto scrollbar-hide -mx-6 px-6">
-                    <div className="flex gap-2 pb-2 w-max">
-                      {weekdays.map((day) => {
-                        const [dayName, dateStr] = day.label.split(" ");
-                        const shortDay = dayName.slice(0, 3);
-                        return (
-                          <button
-                            key={day.date}
-                            onClick={() => setSelectedDay(day.date)}
-                            className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors border min-w-[56px] ${
-                              selectedDay === day.date
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
-                            }`}
-                          >
-                            <span className="text-[10px] uppercase">{shortDay}</span>
-                            <span className="text-sm font-bold">{dateStr}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                   {/* Week navigation */}
+                   <div className="flex items-center justify-between mb-2">
+                     <button
+                       onClick={() => setWeekIndex((i) => Math.max(0, i - 1))}
+                       disabled={weekIndex === 0}
+                       className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                     >
+                       <ChevronLeft className="w-4 h-4" />
+                     </button>
+                     <span className="text-xs text-muted-foreground font-medium">{weekLabel}</span>
+                     <button
+                       onClick={() => setWeekIndex((i) => Math.min(weeks.length - 1, i + 1))}
+                       disabled={weekIndex >= weeks.length - 1}
+                       className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                     >
+                       <ChevronRight className="w-4 h-4" />
+                     </button>
+                   </div>
 
-                  <p className="text-sm text-muted-foreground">Horários para {selectedDayLabel}:</p>
+                   {/* Day buttons - one week at a time */}
+                   <div className="grid grid-cols-6 gap-1.5">
+                     {currentWeek.map((day) => {
+                       const [dayName, dateStr] = day.label.split(" ");
+                       const shortDay = dayName.slice(0, 3);
+                       return (
+                         <button
+                           key={day.date}
+                           onClick={() => setSelectedDay(day.date)}
+                           className={`flex flex-col items-center py-2 rounded-xl text-xs font-semibold transition-colors border ${
+                             selectedDay === day.date
+                               ? "bg-primary text-primary-foreground border-primary"
+                               : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                           }`}
+                         >
+                           <span className="text-[10px] uppercase">{shortDay}</span>
+                           <span className="text-sm font-bold">{dateStr}</span>
+                         </button>
+                       );
+                     })}
+                   </div>
+
+                   <p className="text-sm text-muted-foreground mt-2">Horários para {selectedDayLabel}:</p>
 
                   {currentDayOccurrences.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">Nenhuma aula disponível neste dia</p>
