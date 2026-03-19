@@ -156,8 +156,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       if (data?.error) throw new Error(data.error);
 
       if (data.checkout_url) {
-        window.open(data.checkout_url, "_blank");
-        setStep(3);
+        // Redirect in same tab to avoid popup blockers (especially on mobile)
+        window.location.href = data.checkout_url;
       } else {
         throw new Error("URL de checkout não disponível");
       }
