@@ -17,13 +17,28 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    console.log("Cakto webhook received:", JSON.stringify(body));
+    console.log("Cakto webhook full payload:", JSON.stringify(body, null, 2));
 
     const eventType = body.event || body.type || body.event_type;
     const customerEmail = body.customer?.email || body.buyer?.email || body.email;
     const transactionId = String(body.order?.id || body.transaction?.id || body.id || "");
-    // reservation_id passed via checkout URL ?src= param
-    const reservationId = body.src || body.reservation_id || null;
+
+    const reservationId =
+      body.src ||
+      body.reservation_id ||
+      body.metadata?.src ||
+      body.metadata?.reservation_id ||
+      body.extra?.src ||
+      body.checkout_data?.src ||
+      body.custom_fields?.src ||
+      null;
+
+    console.log("Extracted reservationId:", reservationId);
+    console.log("Extracted customerEmail:", customerEmail);
+
+    // Normalize amount (Cakto may send in reais, we store in centavos)
+    const rawAmount = body.order?.amount || body.product?.price || body.amount || 0;
+    const amount = rawAmount < 1000 ? Math.round(rawAmount * 100) : rawAmount;
 
     if (eventType === "purchase_approved") {
       let reservation = null;
@@ -39,7 +54,7 @@ Deno.serve(async (req) => {
         reservation = data;
       }
 
-      // Strategy 2: Fallback to email lookup
+      // Strategy 2: Fallback to email lookup (with 24h window)
       if (!reservation && customerEmail) {
         const { data: user } = await supabase
           .from("users")
@@ -48,11 +63,13 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (user) {
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
           const { data } = await supabase
             .from("reservations")
             .select("id, class_id, user_id")
             .eq("user_id", user.id)
             .eq("status", "pending")
+            .gte("created_at", oneDayAgo)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -74,7 +91,7 @@ Deno.serve(async (req) => {
         .insert({
           user_id: reservation.user_id,
           reservation_id: reservation.id,
-          amount: body.order?.amount || body.product?.price || 0,
+          amount,
           status: "paid",
           transaction_id: transactionId,
           paid_at: new Date().toISOString(),
@@ -113,7 +130,6 @@ Deno.serve(async (req) => {
       }
 
       if (!reservation && transactionId) {
-        // Find by transaction_id in payments table
         const { data: payment } = await supabase
           .from("payments")
           .select("reservation_id, user_id")
@@ -131,7 +147,6 @@ Deno.serve(async (req) => {
           .update({ status: "canceled" })
           .eq("id", reservation.id);
 
-        // Mark payment as failed
         await supabase
           .from("payments")
           .update({ status: "failed" })
