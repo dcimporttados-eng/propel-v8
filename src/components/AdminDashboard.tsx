@@ -100,9 +100,16 @@ const AdminDashboard = () => {
     let reservationsQuery = supabase
       .from("reservations")
       .select("*")
-      .in("status", ["pending", "confirmed", "canceled"])
       .order("created_at", { ascending: false })
       .limit(200);
+
+    if (filterStatus === "confirmed") {
+      reservationsQuery = reservationsQuery.eq("status", "confirmed");
+    } else if (filterStatus === "pending") {
+      reservationsQuery = reservationsQuery.eq("status", "pending");
+    } else {
+      reservationsQuery = reservationsQuery.in("status", ["pending", "confirmed", "canceled"]);
+    }
 
     if (filterDate) {
       reservationsQuery = reservationsQuery.eq("class_date", filterDate);
