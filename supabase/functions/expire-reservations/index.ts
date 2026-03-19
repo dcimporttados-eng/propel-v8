@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       .from("reservations")
       .select("id")
       .eq("status", "pending")
-      .lt("created_at", thirtyMinutesAgo);
+      .lt("created_at", fiveMinutesAgo);
 
     if (fetchError) {
       console.error("Error fetching expired reservations:", fetchError.message);
