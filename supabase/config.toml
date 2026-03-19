@@ -1,1 +1,10 @@
 project_id = "jhycuejykgzuixeqdutt"
+
+[functions.reserve]
+verify_jwt = false
+
+[functions.webhook-cakto]
+verify_jwt = false
+
+[functions.expire-reservations]
+verify_jwt = false
