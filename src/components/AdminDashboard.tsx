@@ -528,7 +528,30 @@ const AdminDashboard = () => {
 
               {activeTab === "reservations" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Controle completo de reservas e pagamentos. Se a data ficar vazia, mostra tudo.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Apenas reservas <strong>pagas (confirmadas)</strong> aparecem por padrão. Use os filtros para ver pendentes ou todos.
+                  </p>
+
+                  {/* Status filter tabs */}
+                  <div className="flex gap-1.5">
+                    {([
+                      { key: "confirmed" as const, label: "✅ Pagas" },
+                      { key: "pending" as const, label: "⏳ Aguardando" },
+                      { key: "all" as const, label: "Todas" },
+                    ]).map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => setFilterStatus(key)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                          filterStatus === key
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
 
                   <div className="grid sm:grid-cols-3 gap-3">
                     <div>
