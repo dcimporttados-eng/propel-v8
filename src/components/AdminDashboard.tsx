@@ -38,6 +38,9 @@ interface Reservation {
   user_phone?: string;
   class_title?: string;
   class_time?: string;
+  payment_status?: string | null;
+  transaction_id?: string | null;
+  paid_at?: string | null;
 }
 
 const AdminDashboard = () => {
@@ -48,16 +51,15 @@ const AdminDashboard = () => {
   const [suspensions, setSuspensions] = useState<Suspension[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingReservations, setLoadingReservations] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState<"templates" | "suspensions" | "reservations">("templates");
   const [suspendDate, setSuspendDate] = useState("");
   const [suspendClassId, setSuspendClassId] = useState("");
-  const [filterDate, setFilterDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  });
+  const [filterDate, setFilterDate] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
@@ -92,33 +94,62 @@ const AdminDashboard = () => {
   };
 
   const fetchReservations = async () => {
-    const { data: resData } = await supabase
+    setLoadingReservations(true);
+
+    let reservationsQuery = supabase
       .from("reservations")
       .select("*")
-      .eq("class_date", filterDate)
-      .in("status", ["pending", "confirmed"])
-      .order("created_at", { ascending: false });
+      .in("status", ["pending", "confirmed", "canceled"])
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (filterDate) {
+      reservationsQuery = reservationsQuery.eq("class_date", filterDate);
+    }
+
+    const { data: resData } = await reservationsQuery;
 
     if (!resData || resData.length === 0) {
       setReservations([]);
+      setLoadingReservations(false);
       return;
     }
 
-    // Get user and class info
+    // Get user, class and payment info
     const userIds = [...new Set(resData.map((r) => r.user_id))];
     const classIds = [...new Set(resData.map((r) => r.class_id))];
+    const reservationIds = [...new Set(resData.map((r) => r.id))];
 
-    const [usersRes, classesRes] = await Promise.all([
+    const [usersRes, classesRes, paymentsRes] = await Promise.all([
       supabase.from("users").select("id, name, email, phone").in("id", userIds),
       supabase.from("classes").select("id, title, time").in("id", classIds),
+      supabase
+        .from("payments")
+        .select("reservation_id, status, transaction_id, paid_at, created_at")
+        .in("reservation_id", reservationIds)
+        .order("created_at", { ascending: false }),
     ]);
 
     const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
     const classesMap = new Map((classesRes.data || []).map((c) => [c.id, c]));
 
+    const paymentsMap = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
+    for (const p of (paymentsRes.data || []) as { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[]) {
+      // payments are ordered by created_at desc, so first entry is the latest
+      if (!paymentsMap.has(p.reservation_id)) {
+        paymentsMap.set(p.reservation_id, {
+          status: p.status,
+          transaction_id: p.transaction_id,
+          paid_at: p.paid_at,
+        });
+      }
+    }
+
     const enriched: Reservation[] = resData.map((r) => {
       const user = usersMap.get(r.user_id);
       const cls = classesMap.get(r.class_id);
+      const payment = paymentsMap.get(r.id);
+
       return {
         ...r,
         user_name: user?.name || "?",
@@ -126,10 +157,14 @@ const AdminDashboard = () => {
         user_phone: user?.phone || "",
         class_title: cls?.title || "?",
         class_time: cls?.time?.slice(0, 5) || "?",
+        payment_status: payment?.status || null,
+        transaction_id: payment?.transaction_id || null,
+        paid_at: payment?.paid_at || null,
       };
     });
 
     setReservations(enriched);
+    setLoadingReservations(false);
   };
 
   useEffect(() => {
@@ -205,7 +240,7 @@ const AdminDashboard = () => {
       .eq("id", resId);
     if (error) toast.error("Erro: " + error.message);
     else {
-      setReservations((prev) => prev.filter((r) => r.id !== resId));
+      setReservations((prev) => prev.map((r) => (r.id === resId ? { ...r, status: "canceled" } : r)));
       toast.success("Reserva cancelada!");
     }
   };
@@ -255,12 +290,27 @@ const AdminDashboard = () => {
     setOpen(false);
     setAuthenticated(false);
     setPassword("");
+    setSearchTerm("");
   };
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const visibleReservations = reservations.filter((r) => {
+    if (!normalizedSearch) return true;
+
+    const haystack = `${r.user_name || ""} ${r.user_email || ""} ${r.user_phone || ""} ${r.class_title || ""} ${r.class_time || ""}`.toLowerCase();
+    return haystack.includes(normalizedSearch);
+  });
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="opacity-20 hover:opacity-60 transition-opacity p-1" aria-label="Administração">
-        <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+      <button
+        onClick={() => setOpen(true)}
+        className="opacity-70 hover:opacity-100 transition-opacity px-2 py-1 rounded-md border border-border bg-card text-xs text-muted-foreground hover:text-foreground"
+        aria-label="Administração"
+      >
+        <span className="inline-flex items-center gap-1">
+          <Lock className="w-3.5 h-3.5" /> Painel
+        </span>
       </button>
 
       <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
@@ -470,39 +520,89 @@ const AdminDashboard = () => {
 
               {activeTab === "reservations" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Veja os alunos inscritos por dia. Filtre pela data.</p>
+                  <p className="text-xs text-muted-foreground">Controle completo de reservas e pagamentos. Se a data ficar vazia, mostra tudo.</p>
 
-                  <div className="flex items-center gap-3">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Data:</Label>
-                    <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="bg-secondary border-border h-9 text-sm max-w-[180px]" />
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Data (opcional)</Label>
+                      <Input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        className="bg-secondary border-border h-9 text-sm mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Buscar aluno</Label>
+                      <Input
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Nome, e-mail ou telefone"
+                        className="bg-secondary border-border h-9 text-sm mt-1"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => setFilterDate("")} className="h-9 w-full text-xs">
+                        Limpar data
+                      </Button>
+                      <Button type="button" onClick={fetchReservations} className="h-9 w-full text-xs bg-primary text-primary-foreground" disabled={loadingReservations}>
+                        {loadingReservations ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Atualizar"}
+                      </Button>
+                    </div>
                   </div>
 
-                  {reservations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-6">Nenhuma reserva para esta data</p>
+                  {loadingReservations ? (
+                    <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+                  ) : visibleReservations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Nenhuma reserva com estes filtros</p>
                   ) : (
                     <div className="space-y-2">
-                      {reservations.map((r) => (
-                        <div key={r.id} className="flex items-center justify-between p-3 bg-secondary rounded-xl border border-border">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                r.status === "confirmed" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
-                              }`}>
-                                {r.status === "confirmed" ? "Pago" : "Pendente"}
-                              </span>
-                              <span className="text-sm font-medium truncate">{r.user_name}</span>
+                      {visibleReservations.map((r) => {
+                        const paid = r.status === "confirmed" || r.payment_status === "paid";
+                        const canceled = r.status === "canceled";
+
+                        return (
+                          <div key={r.id} className="flex items-center justify-between p-3 bg-secondary rounded-xl border border-border">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                    canceled
+                                      ? "bg-destructive/15 text-destructive"
+                                      : paid
+                                        ? "bg-primary/15 text-primary"
+                                        : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {canceled ? "Cancelada" : paid ? "Pago" : "Aguardando pagamento"}
+                                </span>
+                                <span className="text-sm font-medium truncate">{r.user_name}</span>
+                              </div>
+
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {r.class_title} {r.class_time} {r.class_date ? `— ${new Date(`${r.class_date}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {r.user_email} {r.user_phone && `— ${r.user_phone}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Reserva: {new Date(r.created_at).toLocaleString("pt-BR")}
+                                {r.transaction_id ? ` · TX: ${r.transaction_id}` : ""}
+                                {r.paid_at ? ` · Pago em: ${new Date(r.paid_at).toLocaleString("pt-BR")}` : ""}
+                              </p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {r.class_title} {r.class_time} — {r.user_email} {r.user_phone && `— ${r.user_phone}`}
-                            </p>
+
+                            {!canceled && (
+                              <Button size="sm" variant="ghost" onClick={() => handleCancelReservation(r.id)} className="h-7 px-2 text-xs text-destructive hover:text-destructive">
+                                <XCircle className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => handleCancelReservation(r.id)} className="h-7 px-2 text-xs text-destructive hover:text-destructive">
-                            <XCircle className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+                        );
+                      })}
+
                       <p className="text-xs text-muted-foreground text-center pt-2">
-                        {reservations.filter((r) => r.status === "confirmed").length} confirmadas · {reservations.filter((r) => r.status === "pending").length} pendentes
+                        {visibleReservations.filter((r) => r.status === "confirmed").length} confirmadas · {visibleReservations.filter((r) => r.status === "pending").length} pendentes · {visibleReservations.filter((r) => r.status === "canceled").length} canceladas
                       </p>
                     </div>
                   )}
