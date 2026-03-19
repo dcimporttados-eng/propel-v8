@@ -60,6 +60,7 @@ const AdminDashboard = () => {
   const [suspendClassId, setSuspendClassId] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"confirmed" | "pending" | "all">("confirmed");
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
@@ -99,9 +100,16 @@ const AdminDashboard = () => {
     let reservationsQuery = supabase
       .from("reservations")
       .select("*")
-      .in("status", ["pending", "confirmed", "canceled"])
       .order("created_at", { ascending: false })
       .limit(200);
+
+    if (filterStatus === "confirmed") {
+      reservationsQuery = reservationsQuery.eq("status", "confirmed");
+    } else if (filterStatus === "pending") {
+      reservationsQuery = reservationsQuery.eq("status", "pending");
+    } else {
+      reservationsQuery = reservationsQuery.in("status", ["pending", "confirmed", "canceled"]);
+    }
 
     if (filterDate) {
       reservationsQuery = reservationsQuery.eq("class_date", filterDate);
@@ -171,7 +179,7 @@ const AdminDashboard = () => {
     if (authenticated && activeTab === "reservations") {
       fetchReservations();
     }
-  }, [authenticated, activeTab, filterDate]);
+  }, [authenticated, activeTab, filterDate, filterStatus]);
 
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
@@ -520,7 +528,30 @@ const AdminDashboard = () => {
 
               {activeTab === "reservations" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Controle completo de reservas e pagamentos. Se a data ficar vazia, mostra tudo.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Apenas reservas <strong>pagas (confirmadas)</strong> aparecem por padrão. Use os filtros para ver pendentes ou todos.
+                  </p>
+
+                  {/* Status filter tabs */}
+                  <div className="flex gap-1.5">
+                    {([
+                      { key: "confirmed" as const, label: "✅ Pagas" },
+                      { key: "pending" as const, label: "⏳ Aguardando" },
+                      { key: "all" as const, label: "Todas" },
+                    ]).map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => setFilterStatus(key)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                          filterStatus === key
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
 
                   <div className="grid sm:grid-cols-3 gap-3">
                     <div>
