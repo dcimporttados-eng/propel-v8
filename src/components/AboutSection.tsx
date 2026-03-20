@@ -35,17 +35,16 @@ const AboutSection = () => {
               Sobre nós
             </span>
             <h2 className="text-3xl md:text-5xl font-black uppercase mt-3 mb-6">
-              Sobre o <span className="text-gradient">Pavilhão 8</span>
+              <span className="text-gradient">Pavilhão 8</span> Academia
             </h2>
             <p className="text-muted-foreground leading-relaxed mb-6">
-              O Pavilhão 8 nasceu com um propósito claro: criar um espaço onde cada treino é uma
-              oportunidade de evolução. Aqui, combinamos metodologias de treinamento de alta
-              performance com um ambiente que inspira disciplina e superação.
+              Nosso propósito é promover bem-estar, saúde e qualidade de vida em um ambiente
+              acolhedor e motivador.
             </p>
             <p className="text-muted-foreground leading-relaxed mb-8">
-              Nosso centro de treinamento é equipado com tecnologia de ponta e conta com
-              profissionais especializados para guiar cada aluno na sua jornada de transformação
-              física e mental. Treinamento focado em evolução física, disciplina e performance.
+              Mais do que uma academia, somos uma comunidade que incentiva hábitos saudáveis e
+              evolução constante. Aqui, você encontra apoio, energia e motivação para transformar
+              sua rotina e viver muito melhor.
             </p>
             <div className="grid grid-cols-3 gap-6">
               {[
