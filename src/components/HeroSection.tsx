@@ -15,8 +15,8 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
           src={heroBg}
           alt="Atletas treinando no Pavilhão 8"
           className="w-full h-full object-cover"
-          loading="eager"
-        />
+          loading="eager" />
+        
         <div className="absolute inset-0 bg-background/70" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       </div>
@@ -26,8 +26,8 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        >
+          transition={{ duration: 0.8, ease: "easeOut" }}>
+          
           <span className="inline-block text-primary font-semibold tracking-[0.3em] uppercase text-sm mb-6">
             Centro de Treinamento
           </span>
@@ -37,8 +37,8 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.15, ease: "easeOut" }}
-          className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black uppercase leading-[0.95] tracking-tight mb-6"
-        >
+          className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black uppercase leading-[0.95] tracking-tight mb-6">
+          
           Treine como um
           <br />
           <span className="text-gradient">atleta</span> no
@@ -50,30 +50,30 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-          className="text-muted-foreground text-lg md:text-xl max-w-xl mx-auto mb-10"
-        >
-          Centro de treinamento focado em performance, bike sprint e condicionamento físico.
+          className="text-muted-foreground text-lg md:text-xl max-w-xl mx-auto mb-10">
+          
+          Academia focado em performance, bike sprint e condicionamento físico.
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.45, ease: "easeOut" }}
-          className="flex flex-col sm:flex-row gap-4 justify-center"
-        >
+          className="flex flex-col sm:flex-row gap-4 justify-center">
+          
           <Button
             size="lg"
             onClick={onScheduleClick}
-            className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-full animate-pulse-glow hover:scale-105 transition-transform"
-          >
+            className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-full animate-pulse-glow hover:scale-105 transition-transform">
+            
             Agendar Aula
           </Button>
           <Button
             size="lg"
             variant="outline"
             onClick={() => document.getElementById("modalidades")?.scrollIntoView({ behavior: "smooth" })}
-            className="border-border text-foreground font-semibold text-lg px-8 py-6 rounded-full hover:bg-secondary transition-colors"
-          >
+            className="border-border text-foreground font-semibold text-lg px-8 py-6 rounded-full hover:bg-secondary transition-colors">
+            
             Ver Modalidades
           </Button>
         </motion.div>
@@ -81,8 +81,8 @@ const HeroSection = ({ onScheduleClick }: HeroSectionProps) => {
 
       {/* Bottom fade */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
-    </section>
-  );
+    </section>);
+
 };
 
 export default HeroSection;
