@@ -12,7 +12,7 @@ const modalities = [
     available: true,
   },
   {
-    title: "Treinamento Funcional",
+    title: "FUNTRAINING",
     description: "Exercícios com peso corporal e acessórios para melhorar força, mobilidade e condicionamento físico.",
     image: cardFuncional,
     available: false,
