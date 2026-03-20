@@ -18,7 +18,7 @@ const modalities = [
     available: false,
   },
   {
-    title: "Performance Training",
+    title: "Jump",
     description: "Treinamento avançado para quem busca evolução física e alto desempenho.",
     image: cardPerformance,
     available: false,
