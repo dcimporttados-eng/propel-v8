@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import cardSprintBike from "@/assets/card-sprint-bike.jpg";
 import cardFuncional from "@/assets/card-funcional.jpg";
 import cardPerformance from "@/assets/card-performance.jpg";
@@ -30,6 +32,39 @@ interface TrainingCardsProps {
 }
 
 const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
+  // Map each UI modality label to the actual title stored in the DB.
+  // Fetched on mount so the ScheduleModal filter always matches what exists.
+  const [dbTitleMap, setDbTitleMap] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    supabase
+      .from("classes")
+      .select("title")
+      .then(({ data }) => {
+        if (!data) return;
+        const dbTitles = [...new Set(data.map((c) => c.title as string))];
+        const map = new Map<string, string>();
+        modalities.forEach((mod) => {
+          // Exact match
+          if (dbTitles.includes(mod.title)) {
+            map.set(mod.title, mod.title);
+            return;
+          }
+          // Case-insensitive match
+          const ci = dbTitles.find((t) => t.toLowerCase() === mod.title.toLowerCase());
+          if (ci) {
+            map.set(mod.title, ci);
+            return;
+          }
+          // For the first available modality with no match, use the first DB title
+          if (mod.available && dbTitles.length > 0 && !map.size) {
+            map.set(mod.title, dbTitles[0]);
+          }
+        });
+        setDbTitleMap(map);
+      });
+  }, []);
+
   return (
     <section id="modalidades" className="py-24 px-4">
       <div className="container mx-auto max-w-6xl">
@@ -85,7 +120,7 @@ const TrainingCards = ({ onScheduleClick }: TrainingCardsProps) => {
                 </div>
 
                 <Button
-                  onClick={() => mod.available && onScheduleClick(mod.title)}
+                  onClick={() => mod.available && onScheduleClick(dbTitleMap.get(mod.title) ?? mod.title)}
                   disabled={!mod.available}
                   className="w-full bg-gradient-primary text-primary-foreground font-semibold rounded-full hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >

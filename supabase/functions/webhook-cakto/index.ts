@@ -77,9 +77,47 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Strategy 3: Fallback to canceled reservations in the last 2 hours
+      // (reservation may have been expired before Pix payment arrived)
       if (!reservation) {
-        console.error("No pending reservation found for this payment");
-        return new Response(JSON.stringify({ received: true }), {
+        let canceledQuery = supabase
+          .from("reservations")
+          .select("id, class_id, user_id")
+          .eq("status", "canceled")
+          .gte("created_at", new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (reservationId) {
+          canceledQuery = canceledQuery.eq("id", reservationId);
+        } else if (customerEmail) {
+          const { data: user } = await supabase
+            .from("users")
+            .select("id")
+            .eq("email", customerEmail)
+            .maybeSingle();
+          if (user) canceledQuery = canceledQuery.eq("user_id", user.id);
+        }
+
+        const { data: canceledReservation } = await canceledQuery.maybeSingle();
+
+        if (canceledReservation) {
+          console.log(`Strategy 3: found canceled reservation ${canceledReservation.id} within 2h window — reactivating`);
+          // Reactivate the reservation so the confirmation update below works
+          await supabase
+            .from("reservations")
+            .update({ status: "pending" })
+            .eq("id", canceledReservation.id);
+          reservation = canceledReservation;
+        }
+      }
+
+      if (!reservation) {
+        console.error(
+          `CRITICAL: No reservation found for payment. event=${eventType} email=${customerEmail} reservationId=${reservationId} transactionId=${transactionId}. Payment was received but could not be linked to any reservation.`
+        );
+        // Return 200 so Cakto does not keep retrying, but log clearly for manual intervention
+        return new Response(JSON.stringify({ received: true, warning: "reservation_not_found" }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

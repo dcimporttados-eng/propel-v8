@@ -16,8 +16,8 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Clean up pending checkout attempts older than 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Clean up pending checkout attempts older than 30 minutes (Pix payments can take time)
+    const fiveMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
     const { data: expired, error: fetchError } = await supabase
       .from("reservations")
