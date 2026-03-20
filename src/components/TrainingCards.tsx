@@ -6,7 +6,7 @@ import cardPerformance from "@/assets/card-performance.jpg";
 
 const modalities = [
   {
-    title: "Sprint Bike",
+    title: "Spinning P8",
     description: "Treino de alta intensidade em bicicleta indoor focado em explosão, resistência e alto gasto calórico.",
     image: cardSprintBike,
     available: true,
