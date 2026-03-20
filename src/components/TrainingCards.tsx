@@ -19,7 +19,7 @@ const modalities = [
   },
   {
     title: "Jump",
-    description: "Treinamento avançado para quem busca evolução física e alto desempenho.",
+    description: "Treino aeróbico no mini trampolim que combina ritmo, intensidade e diversão. Melhora o condicionamento físico, fortalece pernas e core, aumenta o gasto calórico e reduz o impacto nas articulações.",
     image: cardPerformance,
     available: false,
   },
