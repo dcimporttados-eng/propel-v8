@@ -79,7 +79,8 @@ Deno.serve(async (req) => {
 
       // Strategy 3: Fallback to canceled reservations in the last 2 hours
       // (reservation may have been expired before Pix payment arrived)
-      if (!reservation) {
+      // Requires at least one identifier to avoid reactivating a random reservation.
+      if (!reservation && (reservationId || customerEmail)) {
         let canceledQuery = supabase
           .from("reservations")
           .select("id, class_id, user_id")

@@ -17,13 +17,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Clean up pending checkout attempts older than 30 minutes (Pix payments can take time)
-    const fiveMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const expiryThreshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
     const { data: expired, error: fetchError } = await supabase
       .from("reservations")
       .select("id")
       .eq("status", "pending")
-      .lt("created_at", fiveMinutesAgo);
+      .lt("created_at", expiryThreshold);
 
     if (fetchError) {
       console.error("Error fetching expired reservations:", fetchError.message);
