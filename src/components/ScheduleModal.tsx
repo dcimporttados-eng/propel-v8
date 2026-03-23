@@ -88,7 +88,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       const [templatesRes, suspensionsRes, reservationsRes] = await Promise.all([
         supabase.from("classes").select("*").order("time", { ascending: true }),
         supabase.from("class_suspensions").select("*").in("suspended_date", dates),
-        supabase.from("reservations").select("class_id, class_date").in("status", ["pending", "confirmed"]).in("class_date", dates),
+        supabase.from("reservations").select("class_id, class_date").eq("status", "confirmed").in("class_date", dates),
       ]);
 
       const allTemplates = ((templatesRes.data || []) as ClassTemplate[]).filter(
