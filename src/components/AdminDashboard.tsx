@@ -619,7 +619,7 @@ const AdminDashboard = () => {
                     ))}
                   </div>
 
-                  <div className="grid sm:grid-cols-3 gap-3">
+                  <div className="grid sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs text-muted-foreground">Data (opcional)</Label>
                       <Input
@@ -630,6 +630,23 @@ const AdminDashboard = () => {
                       />
                     </div>
                     <div>
+                      <Label className="text-xs text-muted-foreground">Aula</Label>
+                      <select
+                        value={filterClassId}
+                        onChange={(e) => setFilterClassId(e.target.value)}
+                        className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm text-foreground"
+                      >
+                        <option value="">Todas as aulas</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
                       <Label className="text-xs text-muted-foreground">Buscar aluno</Label>
                       <Input
                         value={searchTerm}
@@ -639,11 +656,14 @@ const AdminDashboard = () => {
                       />
                     </div>
                     <div className="flex items-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setFilterDate("")} className="h-9 w-full text-xs">
-                        Limpar data
+                      <Button type="button" variant="outline" onClick={() => { setFilterDate(""); setFilterClassId(""); }} className="h-9 flex-1 text-xs">
+                        Limpar filtros
                       </Button>
-                      <Button type="button" onClick={fetchReservations} className="h-9 w-full text-xs bg-primary text-primary-foreground" disabled={loadingReservations}>
+                      <Button type="button" onClick={fetchReservations} className="h-9 flex-1 text-xs bg-primary text-primary-foreground" disabled={loadingReservations}>
                         {loadingReservations ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Atualizar"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={generatePDF} className="h-9 px-3 text-xs" title="Gerar PDF">
+                        <FileDown className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
