@@ -69,6 +69,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [lastReservationId, setLastReservationId] = useState<string>("");
+  const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
 
