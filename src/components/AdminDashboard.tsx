@@ -625,7 +625,7 @@ const AdminDashboard = () => {
                       <Input
                         type="date"
                         value={filterDate}
-                        onChange={(e) => setFilterDate(e.target.value)}
+                        onChange={(e) => { setFilterDate(e.target.value); setFilterClassId(""); }}
                         className="bg-secondary border-border h-9 text-sm mt-1"
                       />
                     </div>
@@ -637,7 +637,15 @@ const AdminDashboard = () => {
                         className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm text-foreground"
                       >
                         <option value="">Todas as aulas</option>
-                        {templates.map((t) => (
+                        {templates
+                          .filter((t) => {
+                            if (!filterDate) return true;
+                            const selectedDay = new Date(`${filterDate}T12:00:00`).getDay();
+                            // JS: 0=Sun,1=Mon..6=Sat → DB: 1=Mon..6=Sat
+                            const dbDay = selectedDay === 0 ? 7 : selectedDay;
+                            return !t.day_of_week || t.day_of_week === dbDay;
+                          })
+                          .map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
                           </option>
