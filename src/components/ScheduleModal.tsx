@@ -160,9 +160,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       if (data?.error) throw new Error(data.error);
 
       if (data.checkout_url) {
-        // Open checkout in new tab and show step 3 with return link
         setLastReservationId(data.reservation_id || "");
-        window.open(data.checkout_url, "_blank");
+        setCheckoutUrl(data.checkout_url);
         setStep(3);
       } else {
         throw new Error("URL de checkout não disponível");
