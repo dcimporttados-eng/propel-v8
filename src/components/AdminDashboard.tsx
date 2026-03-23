@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle } from "lucide-react";
+import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -61,6 +61,7 @@ const AdminDashboard = () => {
   const [filterDate, setFilterDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"confirmed" | "pending" | "all">("confirmed");
+  const [filterClassId, setFilterClassId] = useState("");
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
@@ -113,6 +114,10 @@ const AdminDashboard = () => {
 
     if (filterDate) {
       reservationsQuery = reservationsQuery.eq("class_date", filterDate);
+    }
+
+    if (filterClassId) {
+      reservationsQuery = reservationsQuery.eq("class_id", filterClassId);
     }
 
     const { data: resData } = await reservationsQuery;
@@ -179,7 +184,7 @@ const AdminDashboard = () => {
     if (authenticated && activeTab === "reservations") {
       fetchReservations();
     }
-  }, [authenticated, activeTab, filterDate, filterStatus]);
+  }, [authenticated, activeTab, filterDate, filterStatus, filterClassId]);
 
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
@@ -308,6 +313,67 @@ const AdminDashboard = () => {
     const haystack = `${r.user_name || ""} ${r.user_email || ""} ${r.user_phone || ""} ${r.class_title || ""} ${r.class_time || ""}`.toLowerCase();
     return haystack.includes(normalizedSearch);
   });
+
+  const generatePDF = () => {
+    if (visibleReservations.length === 0) {
+      toast.error("Nenhuma reserva para exportar");
+      return;
+    }
+
+    const dateLabel = filterDate
+      ? new Date(`${filterDate}T12:00:00`).toLocaleDateString("pt-BR")
+      : "Todas as datas";
+    const classLabel = filterClassId
+      ? templates.find((t) => t.id === filterClassId)?.title || "Aula"
+      : "Todas as aulas";
+    const statusLabel = filterStatus === "confirmed" ? "Pagas" : filterStatus === "pending" ? "Aguardando" : "Todas";
+
+    const confirmed = visibleReservations.filter((r) => r.status === "confirmed" || r.payment_status === "paid");
+
+    const rows = visibleReservations.map((r, i) => {
+      const paid = r.status === "confirmed" || r.payment_status === "paid";
+      const canceled = r.status === "canceled";
+      const status = canceled ? "Cancelada" : paid ? "Pago" : "Pendente";
+      const classDate = r.class_date ? new Date(`${r.class_date}T12:00:00`).toLocaleDateString("pt-BR") : "-";
+      return `
+        <tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${i + 1}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.user_name || "-"}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.user_phone || "-"}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.class_title || "-"} ${r.class_time || ""}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${classDate}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${status}</td>
+        </tr>`;
+    });
+
+    const html = `
+      <html><head><meta charset="utf-8"><title>Agendamentos</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 30px; color: #222; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 8px 10px; background: #f5c518; color: #000; font-weight: 600; }
+        .summary { margin-top: 16px; font-size: 13px; color: #555; }
+        @media print { body { margin: 15px; } }
+      </style></head><body>
+      <h1>📋 Agendamentos — FUNTRAINING</h1>
+      <div class="subtitle">${dateLabel} · ${classLabel} · Status: ${statusLabel} · Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+      <table>
+        <thead><tr><th>#</th><th>Aluno(a)</th><th>Telefone</th><th>Aula</th><th>Data</th><th>Status</th></tr></thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+      <div class="summary">${confirmed.length} confirmadas de ${visibleReservations.length} total</div>
+      </body></html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 400);
+    }
+  };
 
   return (
     <>
@@ -553,7 +619,7 @@ const AdminDashboard = () => {
                     ))}
                   </div>
 
-                  <div className="grid sm:grid-cols-3 gap-3">
+                  <div className="grid sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs text-muted-foreground">Data (opcional)</Label>
                       <Input
@@ -564,6 +630,23 @@ const AdminDashboard = () => {
                       />
                     </div>
                     <div>
+                      <Label className="text-xs text-muted-foreground">Aula</Label>
+                      <select
+                        value={filterClassId}
+                        onChange={(e) => setFilterClassId(e.target.value)}
+                        className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm text-foreground"
+                      >
+                        <option value="">Todas as aulas</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
                       <Label className="text-xs text-muted-foreground">Buscar aluno</Label>
                       <Input
                         value={searchTerm}
@@ -573,11 +656,14 @@ const AdminDashboard = () => {
                       />
                     </div>
                     <div className="flex items-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setFilterDate("")} className="h-9 w-full text-xs">
-                        Limpar data
+                      <Button type="button" variant="outline" onClick={() => { setFilterDate(""); setFilterClassId(""); }} className="h-9 flex-1 text-xs">
+                        Limpar filtros
                       </Button>
-                      <Button type="button" onClick={fetchReservations} className="h-9 w-full text-xs bg-primary text-primary-foreground" disabled={loadingReservations}>
+                      <Button type="button" onClick={fetchReservations} className="h-9 flex-1 text-xs bg-primary text-primary-foreground" disabled={loadingReservations}>
                         {loadingReservations ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Atualizar"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={generatePDF} className="h-9 px-3 text-xs" title="Gerar PDF">
+                        <FileDown className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
