@@ -68,6 +68,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
+  const [lastReservationId, setLastReservationId] = useState<string>("");
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
 
@@ -117,6 +118,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setSelectedOccurrence(null);
     setForm({ name: "", phone: "", email: "" });
     setSelectedDay("");
+    setLastReservationId("");
     setWeekIndex(0);
     onOpenChange(false);
   };
@@ -157,6 +159,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
       if (data.checkout_url) {
         // Open checkout in new tab and show step 3 with return link
+        setLastReservationId(data.reservation_id || "");
         window.open(data.checkout_url, "_blank");
         setStep(3);
       } else {
@@ -344,8 +347,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   resetAndClose();
                   // Navigate to confirmation page
                   window.location.href = `/confirmacao?src=${encodeURIComponent(
-                    // We need the reservation ID - store it when created
-                    (window as unknown as Record<string, string>).__lastReservationId || ""
+                    lastReservationId
                   )}`;
                 }}
                 className="rounded-full px-8 bg-gradient-primary text-primary-foreground font-bold"
