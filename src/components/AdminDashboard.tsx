@@ -336,7 +336,7 @@ const AdminDashboard = () => {
     setReservations((prev) =>
       prev.map((r) =>
         r.id === reservation.id
-          ? { ...r, status: "confirmed", payment_status: "paid", transaction_id: transactionId, paid_at: paidAt, payment_id: paymentId }
+          ? { ...r, status: "confirmed", payment_status: "paid", transaction_id: transactionId, paid_at: paidAt }
           : r
       )
     );
