@@ -68,6 +68,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
+  const [lastReservationId, setLastReservationId] = useState<string>("");
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
 
@@ -117,6 +118,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setSelectedOccurrence(null);
     setForm({ name: "", phone: "", email: "" });
     setSelectedDay("");
+    setLastReservationId("");
     setWeekIndex(0);
     onOpenChange(false);
   };
@@ -156,8 +158,10 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       if (data?.error) throw new Error(data.error);
 
       if (data.checkout_url) {
-        // Redirect in same tab to avoid popup blockers (especially on mobile)
-        window.location.href = data.checkout_url;
+        // Open checkout in new tab and show step 3 with return link
+        setLastReservationId(data.reservation_id || "");
+        window.open(data.checkout_url, "_blank");
+        setStep(3);
       } else {
         throw new Error("URL de checkout não disponível");
       }
@@ -332,13 +336,25 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
                 <Check className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-bold mb-2">Reserva criada!</h3>
-              <p className="text-muted-foreground text-sm mb-1">Complete o pagamento na página que abriu.</p>
+              <h3 className="text-lg font-bold mb-2">Quase lá!</h3>
+              <p className="text-muted-foreground text-sm mb-1">Complete o pagamento na aba que abriu.</p>
               <p className="text-muted-foreground text-sm mb-4">
                 {selectedOccurrence?.template.title} — {selectedDayLabel} — {selectedOccurrence?.template.time?.slice(0, 5)}
               </p>
-              <p className="text-xs text-muted-foreground mb-6">Sua vaga será confirmada automaticamente após o pagamento.</p>
-              <Button onClick={resetAndClose} variant="outline" className="rounded-full px-8">Fechar</Button>
+              <p className="text-xs text-muted-foreground mb-6">Após pagar, clique no botão abaixo para confirmar sua reserva.</p>
+              <Button
+                onClick={() => {
+                  resetAndClose();
+                  // Navigate to confirmation page
+                  window.location.href = `/confirmacao?src=${encodeURIComponent(
+                    lastReservationId
+                  )}`;
+                }}
+                className="rounded-full px-8 bg-gradient-primary text-primary-foreground font-bold"
+              >
+                <Check className="w-4 h-4 mr-2" /> Já paguei — confirmar reserva
+              </Button>
+              <Button onClick={resetAndClose} variant="ghost" className="text-muted-foreground text-sm w-full mt-2">Fechar</Button>
             </motion.div>
           )}
         </AnimatePresence>
