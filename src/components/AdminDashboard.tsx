@@ -314,6 +314,67 @@ const AdminDashboard = () => {
     return haystack.includes(normalizedSearch);
   });
 
+  const generatePDF = () => {
+    if (visibleReservations.length === 0) {
+      toast.error("Nenhuma reserva para exportar");
+      return;
+    }
+
+    const dateLabel = filterDate
+      ? new Date(`${filterDate}T12:00:00`).toLocaleDateString("pt-BR")
+      : "Todas as datas";
+    const classLabel = filterClassId
+      ? templates.find((t) => t.id === filterClassId)?.title || "Aula"
+      : "Todas as aulas";
+    const statusLabel = filterStatus === "confirmed" ? "Pagas" : filterStatus === "pending" ? "Aguardando" : "Todas";
+
+    const confirmed = visibleReservations.filter((r) => r.status === "confirmed" || r.payment_status === "paid");
+
+    const rows = visibleReservations.map((r, i) => {
+      const paid = r.status === "confirmed" || r.payment_status === "paid";
+      const canceled = r.status === "canceled";
+      const status = canceled ? "Cancelada" : paid ? "Pago" : "Pendente";
+      const classDate = r.class_date ? new Date(`${r.class_date}T12:00:00`).toLocaleDateString("pt-BR") : "-";
+      return `
+        <tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${i + 1}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.user_name || "-"}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.user_phone || "-"}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${r.class_title || "-"} ${r.class_time || ""}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${classDate}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #333;">${status}</td>
+        </tr>`;
+    });
+
+    const html = `
+      <html><head><meta charset="utf-8"><title>Agendamentos</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 30px; color: #222; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 8px 10px; background: #f5c518; color: #000; font-weight: 600; }
+        .summary { margin-top: 16px; font-size: 13px; color: #555; }
+        @media print { body { margin: 15px; } }
+      </style></head><body>
+      <h1>📋 Agendamentos — FUNTRAINING</h1>
+      <div class="subtitle">${dateLabel} · ${classLabel} · Status: ${statusLabel} · Gerado em ${new Date().toLocaleString("pt-BR")}</div>
+      <table>
+        <thead><tr><th>#</th><th>Aluno(a)</th><th>Telefone</th><th>Aula</th><th>Data</th><th>Status</th></tr></thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+      <div class="summary">${confirmed.length} confirmadas de ${visibleReservations.length} total</div>
+      </body></html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 400);
+    }
+  };
+
   return (
     <>
       <button
