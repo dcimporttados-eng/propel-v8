@@ -61,6 +61,7 @@ const AdminDashboard = () => {
   const [filterDate, setFilterDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"confirmed" | "pending" | "all">("confirmed");
+  const [filterClassId, setFilterClassId] = useState("");
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
