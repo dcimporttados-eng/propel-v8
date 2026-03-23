@@ -258,7 +258,91 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleSuspend = async (e: React.FormEvent) => {
+  const handleMarkAsPaid = async (reservation: Reservation) => {
+    const alreadyPaid = reservation.status === "confirmed" || reservation.payment_status === "paid";
+    if (alreadyPaid) {
+      toast.info("Essa reserva já está marcada como paga");
+      return;
+    }
+
+    const manualCode = window.prompt("Código/transação do pagamento (opcional)")?.trim();
+    const transactionId = manualCode || `MANUAL-CAKTO-${reservation.id.slice(0, 8)}`;
+    const amount = templates.find((t) => t.id === reservation.class_id)?.price ?? 0;
+    const paidAt = new Date().toISOString();
+
+    const { data: existingPayment, error: existingPaymentError } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("reservation_id", reservation.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingPaymentError) {
+      toast.error("Erro ao buscar pagamento: " + existingPaymentError.message);
+      return;
+    }
+
+    let paymentId = existingPayment?.id ?? null;
+
+    if (paymentId) {
+      const { error: paymentUpdateError } = await supabase
+        .from("payments")
+        .update({
+          status: "paid",
+          transaction_id: transactionId,
+          paid_at: paidAt,
+          amount,
+          user_id: reservation.user_id,
+        })
+        .eq("id", paymentId);
+
+      if (paymentUpdateError) {
+        toast.error("Erro ao atualizar pagamento: " + paymentUpdateError.message);
+        return;
+      }
+    } else {
+      const { data: createdPayment, error: paymentInsertError } = await supabase
+        .from("payments")
+        .insert({
+          reservation_id: reservation.id,
+          user_id: reservation.user_id,
+          amount,
+          status: "paid",
+          transaction_id: transactionId,
+          paid_at: paidAt,
+        })
+        .select("id")
+        .single();
+
+      if (paymentInsertError || !createdPayment) {
+        toast.error("Erro ao registrar pagamento: " + (paymentInsertError?.message || "Erro desconhecido"));
+        return;
+      }
+
+      paymentId = createdPayment.id;
+    }
+
+    const { error: reservationUpdateError } = await supabase
+      .from("reservations")
+      .update({ status: "confirmed", payment_id: paymentId })
+      .eq("id", reservation.id);
+
+    if (reservationUpdateError) {
+      toast.error("Erro ao confirmar reserva: " + reservationUpdateError.message);
+      return;
+    }
+
+    setReservations((prev) =>
+      prev.map((r) =>
+        r.id === reservation.id
+          ? { ...r, status: "confirmed", payment_status: "paid", transaction_id: transactionId, paid_at: paidAt, payment_id: paymentId }
+          : r
+      )
+    );
+
+    toast.success("Pagamento confirmado manualmente");
+  };
     e.preventDefault();
     if (!suspendDate || !suspendClassId) {
       toast.error("Selecione o horário e a data");
