@@ -12,7 +12,7 @@ import Confirmacao from "./pages/Confirmacao.tsx";
 const queryClient = new QueryClient();
 
 // Maintenance mode: set to a timestamp when maintenance ends
-const MAINTENANCE_UNTIL = new Date("2026-03-23T13:00:00-03:00"); // ~5 min from now
+const MAINTENANCE_UNTIL = new Date("2026-03-24T00:00:00-03:00"); // end of day
 
 const MaintenancePage = () => {
   const [timeLeft, setTimeLeft] = useState("");
