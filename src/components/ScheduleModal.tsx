@@ -335,23 +335,31 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           {step === 3 && (
             <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                <Check className="w-8 h-8 text-primary" />
+                <ExternalLink className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-bold mb-2">Quase lá!</h3>
-              <p className="text-muted-foreground text-sm mb-1">Complete o pagamento na aba que abriu.</p>
-              <p className="text-muted-foreground text-sm mb-4">
+              <h3 className="text-lg font-bold mb-2">Reserva criada!</h3>
+              <p className="text-muted-foreground text-sm mb-1">
                 {selectedOccurrence?.template.title} — {selectedDayLabel} — {selectedOccurrence?.template.time?.slice(0, 5)}
               </p>
-              <p className="text-xs text-muted-foreground mb-6">Após pagar, clique no botão abaixo para confirmar sua reserva.</p>
+              <p className="text-muted-foreground text-sm mb-4">Clique no botão abaixo para realizar o pagamento via PIX:</p>
+              
+              <a
+                href={checkoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center w-full rounded-full px-8 py-4 bg-gradient-primary text-primary-foreground font-bold text-lg hover:scale-[1.02] transition-transform mb-4"
+              >
+                <ExternalLink className="w-5 h-5 mr-2" /> Pagar agora (PIX)
+              </a>
+
+              <p className="text-xs text-muted-foreground mb-4">Após pagar, clique abaixo para confirmar sua reserva.</p>
               <Button
                 onClick={() => {
                   resetAndClose();
-                  // Navigate to confirmation page
-                  window.location.href = `/confirmacao?src=${encodeURIComponent(
-                    lastReservationId
-                  )}`;
+                  window.location.href = `/confirmacao?src=${encodeURIComponent(lastReservationId)}`;
                 }}
-                className="rounded-full px-8 bg-gradient-primary text-primary-foreground font-bold"
+                variant="outline"
+                className="rounded-full px-8 w-full"
               >
                 <Check className="w-4 h-4 mr-2" /> Já paguei — confirmar reserva
               </Button>
