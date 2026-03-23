@@ -625,7 +625,7 @@ const AdminDashboard = () => {
                       <Input
                         type="date"
                         value={filterDate}
-                        onChange={(e) => setFilterDate(e.target.value)}
+                        onChange={(e) => { setFilterDate(e.target.value); setFilterClassId(""); }}
                         className="bg-secondary border-border h-9 text-sm mt-1"
                       />
                     </div>
