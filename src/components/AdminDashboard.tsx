@@ -802,11 +802,25 @@ const AdminDashboard = () => {
                               </p>
                             </div>
 
-                            {!canceled && (
-                              <Button size="sm" variant="ghost" onClick={() => handleCancelReservation(r.id)} className="h-7 px-2 text-xs text-destructive hover:text-destructive">
-                                <XCircle className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {!paid && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleMarkAsPaid(r)}
+                                  className="h-7 px-2 text-xs text-primary hover:text-primary"
+                                  title="Confirmar pagamento"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+
+                              {!canceled && (
+                                <Button size="sm" variant="ghost" onClick={() => handleCancelReservation(r.id)} className="h-7 px-2 text-xs text-destructive hover:text-destructive">
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
