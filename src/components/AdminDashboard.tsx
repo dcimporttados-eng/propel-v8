@@ -184,7 +184,7 @@ const AdminDashboard = () => {
     if (authenticated && activeTab === "reservations") {
       fetchReservations();
     }
-  }, [authenticated, activeTab, filterDate, filterStatus]);
+  }, [authenticated, activeTab, filterDate, filterStatus, filterClassId]);
 
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
