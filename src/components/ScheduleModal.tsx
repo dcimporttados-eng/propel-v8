@@ -120,6 +120,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setForm({ name: "", phone: "", email: "" });
     setSelectedDay("");
     setLastReservationId("");
+    setCheckoutUrl("");
     setWeekIndex(0);
     onOpenChange(false);
   };
