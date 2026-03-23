@@ -116,6 +116,10 @@ const AdminDashboard = () => {
       reservationsQuery = reservationsQuery.eq("class_date", filterDate);
     }
 
+    if (filterClassId) {
+      reservationsQuery = reservationsQuery.eq("class_id", filterClassId);
+    }
+
     const { data: resData } = await reservationsQuery;
 
     if (!resData || resData.length === 0) {
