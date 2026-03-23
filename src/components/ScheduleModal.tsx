@@ -341,7 +341,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               <p className="text-muted-foreground text-sm mb-1">
                 {selectedOccurrence?.template.title} — {selectedDayLabel} — {selectedOccurrence?.template.time?.slice(0, 5)}
               </p>
-              <p className="text-muted-foreground text-sm mb-4">Clique no botão abaixo para realizar o pagamento via PIX:</p>
+              <p className="text-muted-foreground text-sm mb-4">Clique no botão abaixo para realizar o pagamento:</p>
               
               <a
                 href={checkoutUrl}
@@ -349,21 +349,11 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center w-full rounded-full px-8 py-4 bg-gradient-primary text-primary-foreground font-bold text-lg hover:scale-[1.02] transition-transform mb-4"
               >
-                <ExternalLink className="w-5 h-5 mr-2" /> Pagar agora (PIX)
+                <ExternalLink className="w-5 h-5 mr-2" /> Pagar agora
               </a>
 
-              <p className="text-xs text-muted-foreground mb-4">Após pagar, clique abaixo para confirmar sua reserva.</p>
-              <Button
-                onClick={() => {
-                  resetAndClose();
-                  window.location.href = `/confirmacao?src=${encodeURIComponent(lastReservationId)}`;
-                }}
-                variant="outline"
-                className="rounded-full px-8 w-full"
-              >
-                <Check className="w-4 h-4 mr-2" /> Já paguei — confirmar reserva
-              </Button>
-              <Button onClick={resetAndClose} variant="ghost" className="text-muted-foreground text-sm w-full mt-2">Fechar</Button>
+              <p className="text-xs text-muted-foreground mb-4">Após o pagamento, sua reserva será confirmada automaticamente.</p>
+              <Button onClick={resetAndClose} variant="ghost" className="text-muted-foreground text-sm w-full">Fechar</Button>
             </motion.div>
           )}
         </AnimatePresence>
