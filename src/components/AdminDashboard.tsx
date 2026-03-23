@@ -343,6 +343,7 @@ const AdminDashboard = () => {
 
     toast.success("Pagamento confirmado manualmente");
   };
+  const handleSuspend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!suspendDate || !suspendClassId) {
       toast.error("Selecione o horário e a data");
