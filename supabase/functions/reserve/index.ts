@@ -18,7 +18,11 @@ Deno.serve(async (req) => {
 
     const { class_id, class_date, name, email, phone } = await req.json();
 
-    if (!class_id || !name || !email || !phone) {
+    const normalizedName = typeof name === "string" ? name.trim() : "";
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const normalizedPhone = typeof phone === "string" ? phone.trim() : "";
+
+    if (!class_id || !normalizedName || !normalizedEmail || !normalizedPhone) {
       return new Response(
         JSON.stringify({ error: "Campos obrigatórios: class_id, name, email, phone" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -56,18 +60,18 @@ Deno.serve(async (req) => {
     const { data: existingUser } = await supabase
       .from("users")
       .select("id")
-      .eq("email", email)
+      .ilike("email", normalizedEmail)
       .maybeSingle();
 
     let userId: string;
     if (existingUser) {
       userId = existingUser.id;
       // Update name/phone if changed
-      await supabase.from("users").update({ name, phone }).eq("id", userId);
+      await supabase.from("users").update({ name: normalizedName, phone: normalizedPhone }).eq("id", userId);
     } else {
       const { data: newUser, error: userError } = await supabase
         .from("users")
-        .insert({ name, email, phone })
+        .insert({ name: normalizedName, email: normalizedEmail, phone: normalizedPhone })
         .select("id")
         .single();
       if (userError || !newUser) throw new Error(`Erro ao criar usuário: ${userError?.message}`);
@@ -89,7 +93,7 @@ Deno.serve(async (req) => {
     // Build checkout URL with reservation context
     // Append email and reservation_id as query params so we can match on webhook
     const checkoutUrl = new URL(classData.checkout_url);
-    checkoutUrl.searchParams.set("email", email);
+    checkoutUrl.searchParams.set("email", normalizedEmail);
     checkoutUrl.searchParams.set("src", reservation.id);
 
     return new Response(
