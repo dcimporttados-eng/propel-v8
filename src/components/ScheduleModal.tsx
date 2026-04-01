@@ -42,7 +42,7 @@ function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[]
   // Start from today or launch date, whichever is later
   const start = now >= LAUNCH_DATE ? now : LAUNCH_DATE;
   
-  for (let i = 0; days.length < 15; i++) {
+  for (let i = 0; days.length < 30; i++) {
     const candidate = new Date(start);
     candidate.setDate(start.getDate() + i);
     const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
