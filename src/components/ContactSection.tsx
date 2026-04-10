@@ -54,7 +54,7 @@ const ContactSection = () => {
             <MapPin className="w-8 h-8 text-primary" />
             <span className="font-semibold">Localização</span>
             <span className="text-sm text-muted-foreground text-center">
-              Av. Principal, 800 — Centro
+              Av. Perimetral, 905 - Lot. Riva, Portão - RS, 93180-000
             </span>
           </div>
         </motion.div>
