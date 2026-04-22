@@ -63,6 +63,7 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
           )
         `)
         .in("user_id", userIds)
+        .neq("status", "canceled")
         .order("class_date", { ascending: false });
 
       if (resError) throw resError;
