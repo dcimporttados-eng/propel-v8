@@ -79,15 +79,27 @@ const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
                   {l.label}
                 </button>
               ))}
-              <Button
-                onClick={() => {
-                  setMobileOpen(false);
-                  onScheduleClick();
-                }}
-                className="bg-gradient-primary text-primary-foreground font-semibold rounded-full mt-2"
-              >
-                Agendar aula
-              </Button>
+              <div className="flex flex-col gap-2 mt-2">
+                <Button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    onScheduleClick();
+                  }}
+                  className="bg-gradient-primary text-primary-foreground font-semibold rounded-full"
+                >
+                  Agendar aula
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    onConsultClick();
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Minha Reserva
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
