@@ -101,6 +101,11 @@ Deno.serve(async (req) => {
     }
 
     if (mpStatus === "approved") {
+      // If it was previously canceled (e.g., from a previous failed attempt webhook), re-confirm it
+      if (reservation.status === "canceled") {
+        console.log(`⚠️ Reservation ${reservation.id} was canceled but payment is now approved. Re-confirming.`);
+      }
+      
       // Check if payment already exists
       const { data: existingPayment } = await supabase
         .from("payments")
@@ -148,10 +153,14 @@ Deno.serve(async (req) => {
       console.log(`✅ Reservation ${reservation.id} confirmed via Mercado Pago payment ${transactionId}`);
 
     } else if (mpStatus === "refunded" || mpStatus === "cancelled" || mpStatus === "rejected") {
-      // Cancel the reservation
-      await supabase.from("reservations").update({ status: "canceled" }).eq("id", reservation.id);
-      console.log(`❌ Reservation ${reservation.id} canceled (MP status: ${mpStatus})`);
-
+      // ONLY cancel if it's not already confirmed/paid
+      if (reservation.status === "confirmed") {
+        console.log(`⚠️ Ignored ${mpStatus} webhook for reservation ${reservation.id} because it's already confirmed/paid.`);
+      } else {
+        // Cancel the reservation
+        await supabase.from("reservations").update({ status: "canceled" }).eq("id", reservation.id);
+        console.log(`❌ Reservation ${reservation.id} canceled (MP status: ${mpStatus})`);
+      }
     } else {
       console.log(`⏳ Payment ${transactionId} status: ${mpStatus} — no action taken`);
     }
