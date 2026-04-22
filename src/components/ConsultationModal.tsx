@@ -97,7 +97,7 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
         return <span className="flex items-center gap-1 text-xs font-bold text-green-500"><CheckCircle2 className="w-3 h-3" /> Confirmada</span>;
       case "pending":
         return <span className="flex items-center gap-1 text-xs font-bold text-yellow-500"><Clock className="w-3 h-3" /> Pendente</span>;
-      case "cancelled":
+      case "canceled":
         return <span className="flex items-center gap-1 text-xs font-bold text-destructive"><XCircle className="w-3 h-3" /> Cancelada</span>;
       default:
         return <span className="text-xs font-bold text-muted-foreground">{status}</span>;
