@@ -33,10 +33,10 @@ const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
         <div className="hidden md:flex items-center gap-8">
           <button
             onClick={onConsultClick}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Minha Reserva
-          </button>
+             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+           >
+             Minhas Reservas
+           </button>
           {links.map((l) => (
             <button
               key={l.href}
@@ -95,10 +95,10 @@ const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
                     setMobileOpen(false);
                     onConsultClick();
                   }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Minha Reserva
-                </Button>
+                   className="text-muted-foreground hover:text-foreground"
+                 >
+                   Minhas Reservas
+                 </Button>
               </div>
             </div>
           </motion.div>
