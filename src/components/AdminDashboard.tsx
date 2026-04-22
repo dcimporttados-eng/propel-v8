@@ -783,16 +783,16 @@ const AdminDashboard = () => {
                          const isPast = isPastDate(r.class_date);
  
                          return (
-                           <div 
-                             key={r.id} 
-                             className={`flex items-center justify-between p-3 bg-secondary rounded-xl border border-border ${
-                               isPast ? "bg-yellow-500/10 border-l-4 border-l-yellow-600" : ""
-                             }`}
-                           >
+                            <div 
+                              key={r.id} 
+                              className={`flex items-center justify-between p-3 bg-secondary rounded-xl border border-border transition-colors hover:bg-secondary/80 ${
+                                isPast ? "bg-muted/20 border-l-4 border-l-muted-foreground/30 grayscale-[0.2]" : ""
+                              }`}
+                            >
                              <div className="min-w-0 flex-1">
                                <div className="flex items-center gap-2 flex-wrap">
                                  {isPast && (
-                                   <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-700 bg-yellow-500/20 px-1.5 py-0.5 rounded">
+                                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                                      Histórico
                                    </span>
                                  )}
