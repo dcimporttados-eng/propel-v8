@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 interface NavbarProps {
   onScheduleClick: () => void;
+  onConsultClick: () => void;
 }
 
 const links = [
@@ -13,7 +14,7 @@ const links = [
   { label: "Contato", href: "#contato" },
 ];
 
-const Navbar = ({ onScheduleClick }: NavbarProps) => {
+const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const scrollTo = (href: string) => {
@@ -30,6 +31,12 @@ const Navbar = ({ onScheduleClick }: NavbarProps) => {
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-8">
+          <button
+            onClick={onConsultClick}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Minha Reserva
+          </button>
           {links.map((l) => (
             <button
               key={l.href}
