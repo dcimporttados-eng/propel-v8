@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar, Clock, Loader2, Search, CheckCircle2, XCircle } from "lucide-react";
+ import { Calendar, Clock, Loader2, Search, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
+ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -91,25 +92,38 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
     return `${day}/${month}/${year}`;
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return <span className="flex items-center gap-1 text-xs font-bold text-green-500"><CheckCircle2 className="w-3 h-3" /> Confirmada</span>;
-      case "pending":
-        return <span className="flex items-center gap-1 text-xs font-bold text-yellow-500"><Clock className="w-3 h-3" /> Pendente</span>;
-      case "canceled":
-        return <span className="flex items-center gap-1 text-xs font-bold text-destructive"><XCircle className="w-3 h-3" /> Cancelada</span>;
-      default:
-        return <span className="text-xs font-bold text-muted-foreground">{status}</span>;
-    }
-  };
+   const getStatusBadge = (status: string) => {
+     switch (status) {
+       case "confirmed":
+         return (
+           <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 flex items-center gap-1 py-0.5">
+             <CheckCircle2 className="w-3 h-3" /> Confirmada
+           </Badge>
+         );
+       case "pending":
+         return (
+           <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 flex items-center gap-1 py-0.5">
+             <Clock className="w-3 h-3" /> Aguardando Pagamento
+           </Badge>
+         );
+       case "canceled":
+         return (
+           <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 flex items-center gap-1 py-0.5">
+             <XCircle className="w-3 h-3" /> Cancelada
+           </Badge>
+         );
+       default:
+         return <Badge variant="secondary">{status}</Badge>;
+     }
+   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-card border-border sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Consultar Minha Reserva</DialogTitle>
-        </DialogHeader>
+         <DialogHeader>
+           <DialogTitle className="text-xl font-bold">Minhas Reservas</DialogTitle>
+           <p className="text-xs text-muted-foreground">Acompanhe o status e garanta seu horário.</p>
+         </DialogHeader>
 
         <div className="space-y-4 pt-4">
           <form onSubmit={handleSearch} className="space-y-4">
@@ -138,26 +152,36 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
               </p>
             )}
 
-             {reservations.map((res) => {
-               const isPast = isPastDate(res.class_date);
-               return (
-                 <div 
-                   key={res.id} 
-                   className={`p-4 rounded-xl border border-border bg-secondary/50 space-y-2 relative overflow-hidden ${
-                     isPast ? "bg-yellow-500/10 border-l-4 border-l-yellow-600" : ""
-                   }`}
-                 >
+              {reservations.map((res) => {
+                const isPast = isPastDate(res.class_date);
+                const isConfirmed = res.status === "confirmed";
+                return (
+                  <div 
+                    key={res.id} 
+                    className={`p-4 rounded-xl border border-border bg-secondary/40 space-y-2 relative overflow-hidden transition-all hover:bg-secondary/60 ${
+                      isPast ? "bg-muted/50 grayscale-[0.5]" : 
+                      isConfirmed ? "border-l-4 border-l-green-500 bg-green-500/[0.02]" : 
+                      res.status === "pending" ? "border-l-4 border-l-yellow-500 bg-yellow-500/[0.02]" : ""
+                    }`}
+                  >
                    <div className="flex justify-between items-start">
                      <div className="flex flex-col">
-                       <h4 className="font-bold text-foreground">{res.classes.title}</h4>
-                       {isPast && (
-                         <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-700 bg-yellow-500/20 px-1.5 py-0.5 rounded w-fit">
-                           Histórico
-                         </span>
-                       )}
-                     </div>
-                     {getStatusBadge(res.status)}
-                   </div>
+                        <h4 className="font-bold text-foreground text-base leading-tight">{res.classes.title}</h4>
+                        <div className="flex gap-2 mt-1">
+                          {isPast && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit">
+                              Aula Passada
+                            </span>
+                          )}
+                          {!isPast && isConfirmed && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded w-fit flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3" /> Vaga Garantida
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {getStatusBadge(res.status)}
+                    </div>
                    <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                      <div className="flex items-center gap-1">
                        <Calendar className="w-4 h-4 text-primary" />
@@ -168,11 +192,16 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
                        {res.classes.time.slice(0, 5)}
                      </div>
                    </div>
-                   {res.status === "pending" && (
-                     <p className="text-[10px] text-yellow-500/80 mt-1">
-                       * Aguardando confirmação do pagamento
-                     </p>
-                   )}
+                    {!isPast && res.status === "pending" && (
+                      <p className="text-[10px] text-yellow-600 font-medium mt-2 leading-normal flex items-start gap-1 bg-yellow-500/10 p-2 rounded-lg border border-yellow-500/10">
+                        <span className="shrink-0">•</span> Seu horário ainda não está garantido. Finalize o pagamento para confirmar sua vaga.
+                      </p>
+                    )}
+                    {!isPast && isConfirmed && (
+                      <p className="text-[10px] text-green-600 font-medium mt-2 leading-normal flex items-start gap-1 bg-green-500/10 p-2 rounded-lg border border-green-500/10">
+                        <ShieldCheck className="w-3 h-3 shrink-0 mt-0.5" /> Tudo certo! Seu horário está reservado e confirmado no sistema.
+                      </p>
+                    )}
                  </div>
                );
              })}
