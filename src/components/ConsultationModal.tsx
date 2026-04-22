@@ -36,10 +36,22 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
     setLoading(true);
     setHasSearched(false);
     try {
+      const cleanIdentifier = identifier.trim();
+      const digitsOnly = cleanIdentifier.replace(/\D/g, "");
+      
+      let orClause = `email.ilike.${cleanIdentifier}`;
+      if (digitsOnly.length >= 8) {
+        // Se tiver dígitos suficientes, busca pelo telefone normalizado
+        // Usamos % no início para lidar com prefixos como +55 ou 55
+        orClause += `,phone.ilike.%${digitsOnly}`;
+      } else {
+        orClause += `,phone.eq.${cleanIdentifier}`;
+      }
+
       const { data: users, error: userError } = await supabase
         .from("users")
         .select("id")
-        .or(`email.ilike.${identifier.trim()},phone.eq.${identifier.trim()}`);
+        .or(orClause);
 
       if (userError) throw userError;
 
