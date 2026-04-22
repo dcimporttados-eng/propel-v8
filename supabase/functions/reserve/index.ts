@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
 
     const normalizedName = typeof name === "string" ? name.trim() : "";
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-    const normalizedPhone = typeof phone === "string" ? phone.trim() : "";
+    const normalizedPhone = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
 
     if (!class_id || !normalizedName || !normalizedEmail || !normalizedPhone) {
       return new Response(
