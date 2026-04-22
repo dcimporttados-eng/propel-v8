@@ -76,7 +76,16 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
     }
   };
 
-  const formatDate = (dateStr: string) => {
+   const isPastDate = (dateStr: string) => {
+     if (!dateStr) return false;
+     const today = new Date();
+     today.setHours(0, 0, 0, 0);
+     const [year, month, day] = dateStr.split("-").map(Number);
+     const classDate = new Date(year, month - 1, day);
+     return classDate < today;
+   };
+ 
+   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
     const [year, month, day] = dateStr.split("-");
     return `${day}/${month}/${year}`;
@@ -129,29 +138,44 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
               </p>
             )}
 
-            {reservations.map((res) => (
-              <div key={res.id} className="p-4 rounded-xl border border-border bg-secondary/50 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-bold text-foreground">{res.classes.title}</h4>
-                  {getStatusBadge(res.status)}
-                </div>
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4 text-primary" />
-                    {formatDate(res.class_date)}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4 text-primary" />
-                    {res.classes.time.slice(0, 5)}
-                  </div>
-                </div>
-                {res.status === "pending" && (
-                  <p className="text-[10px] text-yellow-500/80 mt-1">
-                    * Aguardando confirmação do pagamento
-                  </p>
-                )}
-              </div>
-            ))}
+             {reservations.map((res) => {
+               const isPast = isPastDate(res.class_date);
+               return (
+                 <div 
+                   key={res.id} 
+                   className={`p-4 rounded-xl border border-border bg-secondary/50 space-y-2 relative overflow-hidden ${
+                     isPast ? "bg-yellow-500/10 border-l-4 border-l-yellow-600" : ""
+                   }`}
+                 >
+                   <div className="flex justify-between items-start">
+                     <div className="flex flex-col">
+                       <h4 className="font-bold text-foreground">{res.classes.title}</h4>
+                       {isPast && (
+                         <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-700 bg-yellow-500/20 px-1.5 py-0.5 rounded w-fit">
+                           Histórico
+                         </span>
+                       )}
+                     </div>
+                     {getStatusBadge(res.status)}
+                   </div>
+                   <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                     <div className="flex items-center gap-1">
+                       <Calendar className="w-4 h-4 text-primary" />
+                       {formatDate(res.class_date)}
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <Clock className="w-4 h-4 text-primary" />
+                       {res.classes.time.slice(0, 5)}
+                     </div>
+                   </div>
+                   {res.status === "pending" && (
+                     <p className="text-[10px] text-yellow-500/80 mt-1">
+                       * Aguardando confirmação do pagamento
+                     </p>
+                   )}
+                 </div>
+               );
+             })}
           </div>
         </div>
       </DialogContent>
