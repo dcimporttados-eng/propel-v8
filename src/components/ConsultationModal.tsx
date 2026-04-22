@@ -107,12 +107,6 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
              <Clock className="w-3 h-3" /> Aguardando Pagamento
            </Badge>
          );
-       case "canceled":
-         return (
-           <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 flex items-center gap-1 py-0.5">
-             <XCircle className="w-3 h-3" /> Cancelada
-           </Badge>
-         );
        default:
          return <Badge variant="secondary">{status}</Badge>;
      }
