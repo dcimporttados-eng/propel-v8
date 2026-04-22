@@ -41,9 +41,13 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
       
       let orClause = `email.ilike.${cleanIdentifier}`;
       if (digitsOnly.length >= 8) {
-        // Se tiver dígitos suficientes, busca pelo telefone normalizado
-        // Usamos % no início para lidar com prefixos como +55 ou 55
-        orClause += `,phone.ilike.%${digitsOnly}`;
+        // Trata o prefixo 55 se o usuário digitou mas não está no banco (ou vice-versa)
+        let searchDigits = digitsOnly;
+        if (digitsOnly.startsWith("55") && digitsOnly.length > 10) {
+          searchDigits = digitsOnly.substring(2);
+        }
+        // Usamos % no início para lidar com possíveis prefixos que restarem
+        orClause += `,phone.ilike.%${searchDigits}`;
       } else {
         orClause += `,phone.eq.${cleanIdentifier}`;
       }
