@@ -68,7 +68,14 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
 
       if (resError) throw resError;
 
-      setReservations((resData as any) || []);
+      const data = (resData as any[]) || [];
+      // Filtra para mostrar apenas confirmadas (futuras e passadas) e pendentes futuras
+      const filtered = data.filter(res => {
+        const isPast = isPastDate(res.class_date);
+        if (isPast && res.status === 'pending') return false;
+        return true;
+      });
+      setReservations(filtered);
       setHasSearched(true);
     } catch (err: any) {
       console.error("Search error:", err);
