@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
- import { Calendar, Clock, Loader2, Search, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
+ import { Calendar, Clock, Loader2, Search, CheckCircle2, ShieldCheck } from "lucide-react";
  import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -150,7 +150,7 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
           <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
             {hasSearched && reservations.length === 0 && (
               <p className="text-center py-8 text-muted-foreground text-sm">
-                Nenhuma reserva encontrada para os dados informados.
+                 Nenhuma reserva confirmada ou pendente encontrada.
               </p>
             )}
 
