@@ -160,4 +160,3 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
 };
 
 export default ConsultationModal;
-*** End Patch
