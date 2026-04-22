@@ -192,11 +192,16 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
                        {res.classes.time.slice(0, 5)}
                      </div>
                    </div>
-                   {res.status === "pending" && (
-                     <p className="text-[10px] text-yellow-500/80 mt-1">
-                       * Aguardando confirmação do pagamento
-                     </p>
-                   )}
+                    {!isPast && res.status === "pending" && (
+                      <p className="text-[10px] text-yellow-600 font-medium mt-2 leading-normal flex items-start gap-1 bg-yellow-500/10 p-2 rounded-lg border border-yellow-500/10">
+                        <span className="shrink-0">•</span> Seu horário ainda não está garantido. Finalize o pagamento para confirmar sua vaga.
+                      </p>
+                    )}
+                    {!isPast && isConfirmed && (
+                      <p className="text-[10px] text-green-600 font-medium mt-2 leading-normal flex items-start gap-1 bg-green-500/10 p-2 rounded-lg border border-green-500/10">
+                        <ShieldCheck className="w-3 h-3 shrink-0 mt-0.5" /> Tudo certo! Seu horário está reservado e confirmado no sistema.
+                      </p>
+                    )}
                  </div>
                );
              })}
