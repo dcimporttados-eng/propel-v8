@@ -36,10 +36,26 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
     setLoading(true);
     setHasSearched(false);
     try {
+      const cleanIdentifier = identifier.trim();
+      const digitsOnly = cleanIdentifier.replace(/\D/g, "");
+      
+      let orClause = `email.ilike.${cleanIdentifier}`;
+      if (digitsOnly.length >= 8) {
+        // Trata o prefixo 55 se o usuário digitou mas não está no banco (ou vice-versa)
+        let searchDigits = digitsOnly;
+        if (digitsOnly.startsWith("55") && digitsOnly.length > 10) {
+          searchDigits = digitsOnly.substring(2);
+        }
+        // Usamos % no início para lidar com possíveis prefixos que restarem
+        orClause += `,phone.ilike.%${searchDigits}`;
+      } else {
+        orClause += `,phone.eq.${cleanIdentifier}`;
+      }
+
       const { data: users, error: userError } = await supabase
         .from("users")
         .select("id")
-        .or(`email.ilike.${identifier.trim()},phone.eq.${identifier.trim()}`);
+        .or(orClause);
 
       if (userError) throw userError;
 
