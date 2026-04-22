@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
- import { Calendar, Clock, Loader2, Search, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
+ import { Calendar, Clock, Loader2, Search, CheckCircle2, ShieldCheck } from "lucide-react";
  import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -63,11 +63,19 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
           )
         `)
         .in("user_id", userIds)
+        .neq("status", "canceled")
         .order("class_date", { ascending: false });
 
       if (resError) throw resError;
 
-      setReservations((resData as any) || []);
+      const data = (resData as any[]) || [];
+      // Filtra para mostrar apenas confirmadas (futuras e passadas) e pendentes futuras
+      const filtered = data.filter(res => {
+        const isPast = isPastDate(res.class_date);
+        if (isPast && res.status === 'pending') return false;
+        return true;
+      });
+      setReservations(filtered);
       setHasSearched(true);
     } catch (err: any) {
       console.error("Search error:", err);
@@ -106,12 +114,6 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
              <Clock className="w-3 h-3" /> Aguardando Pagamento
            </Badge>
          );
-       case "canceled":
-         return (
-           <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 flex items-center gap-1 py-0.5">
-             <XCircle className="w-3 h-3" /> Cancelada
-           </Badge>
-         );
        default:
          return <Badge variant="secondary">{status}</Badge>;
      }
@@ -148,7 +150,7 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
           <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1">
             {hasSearched && reservations.length === 0 && (
               <p className="text-center py-8 text-muted-foreground text-sm">
-                Nenhuma reserva encontrada para os dados informados.
+                 Nenhuma reserva confirmada ou pendente encontrada.
               </p>
             )}
 
