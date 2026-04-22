@@ -377,7 +377,16 @@ const AdminDashboard = () => {
     setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   };
 
-  const getTemplateName = (classId: string) => {
+   const isPastDate = (dateStr: string | null) => {
+     if (!dateStr) return false;
+     const today = new Date();
+     today.setHours(0, 0, 0, 0);
+     const [year, month, day] = dateStr.split("-").map(Number);
+     const classDate = new Date(year, month - 1, day);
+     return classDate < today;
+   };
+ 
+   const getTemplateName = (classId: string) => {
     const t = templates.find((t) => t.id === classId);
     if (!t) return "?";
     const dayLabel = t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb";
@@ -771,10 +780,22 @@ const AdminDashboard = () => {
                         const paid = r.status === "confirmed" || r.payment_status === "paid";
                         const canceled = r.status === "canceled";
 
-                        return (
-                          <div key={r.id} className="flex items-center justify-between p-3 bg-secondary rounded-xl border border-border">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
+                         const isPast = isPastDate(r.class_date);
+ 
+                         return (
+                           <div 
+                             key={r.id} 
+                             className={`flex items-center justify-between p-3 bg-secondary rounded-xl border border-border ${
+                               isPast ? "bg-yellow-500/10 border-l-4 border-l-yellow-600" : ""
+                             }`}
+                           >
+                             <div className="min-w-0 flex-1">
+                               <div className="flex items-center gap-2 flex-wrap">
+                                 {isPast && (
+                                   <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-700 bg-yellow-500/20 px-1.5 py-0.5 rounded">
+                                     Histórico
+                                   </span>
+                                 )}
                                 <span
                                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                     canceled
