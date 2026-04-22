@@ -493,24 +493,31 @@ Deno.serve(async (req) => {
         });
       }
 
-      await supabase
-        .from("reservations")
-        .update({ status: "canceled" })
-        .eq("id", reservation.id);
+      // Only cancel if not confirmed already (to avoid race conditions with out-of-order webhooks)
+      const { data: currentRes } = await supabase.from("reservations").select("status").eq("id", reservation.id).maybeSingle();
+      
+      if (currentRes?.status === "confirmed") {
+        console.log(`⚠️ Ignored ${eventType} for reservation ${reservation.id} because it's already confirmed.`);
+      } else {
+        await supabase
+          .from("reservations")
+          .update({ status: "canceled" })
+          .eq("id", reservation.id);
 
-      await supabase
-        .from("payments")
-        .update({ status: "failed" })
-        .eq("reservation_id", reservation.id);
-
-      if (transactionId) {
         await supabase
           .from("payments")
           .update({ status: "failed" })
-          .eq("transaction_id", transactionId);
-      }
+          .eq("reservation_id", reservation.id);
 
-      console.log(`Reservation ${reservation.id} canceled due to ${eventType}`);
+        if (transactionId) {
+          await supabase
+            .from("payments")
+            .update({ status: "failed" })
+            .eq("transaction_id", transactionId);
+        }
+
+        console.log(`Reservation ${reservation.id} canceled due to ${eventType}`);
+      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
