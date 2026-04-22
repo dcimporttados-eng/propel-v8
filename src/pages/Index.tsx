@@ -7,9 +7,11 @@ import AboutSection from "@/components/AboutSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import CTASection from "@/components/CTASection";
 import ContactSection from "@/components/ContactSection";
+import ConsultationModal from "@/components/ConsultationModal";
 
 const Index = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [consultOpen, setConsultOpen] = useState(false);
   const [initialModality, setInitialModality] = useState<string | undefined>();
 
   const openSchedule = (modality?: string) => {
@@ -19,7 +21,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar onScheduleClick={() => openSchedule()} />
+      <Navbar onScheduleClick={() => openSchedule()} onConsultClick={() => setConsultOpen(true)} />
       <HeroSection onScheduleClick={() => openSchedule()} />
       <TrainingCards onScheduleClick={openSchedule} />
       <AboutSection />
@@ -31,6 +33,7 @@ const Index = () => {
         onOpenChange={setScheduleOpen}
         initialModality={initialModality}
       />
+      <ConsultationModal open={consultOpen} onOpenChange={setConsultOpen} />
     </div>
   );
 };
