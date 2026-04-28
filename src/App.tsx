@@ -6,10 +6,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Confirmacao from "./pages/Confirmacao.tsx";
+import MaintenanceScreen, { isUnderMaintenance } from "./components/MaintenanceScreen";
 
 const queryClient = new QueryClient();
 
 const App = () => {
+  if (isUnderMaintenance()) {
+    return <MaintenanceScreen />;
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
