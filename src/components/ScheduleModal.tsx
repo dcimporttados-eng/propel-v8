@@ -1,14 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+// Promo "Combo 2 aulas por R$39,90" — válida em maio/2026
+const PROMO_START = "2026-05-01";
+const PROMO_END = "2026-05-31";
+const COMBO_PRICE_CENTS = 3990;
+const REGULAR_PRICE_CENTS = 2990;
+
+function isPromoActiveNow(): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  return today >= PROMO_START && today <= PROMO_END;
+}
 
 interface ClassTemplate {
   id: string;
@@ -23,9 +34,14 @@ interface ClassTemplate {
 
 interface ClassOccurrence {
   template: ClassTemplate;
-  date: string; // YYYY-MM-DD
+  date: string;
   dayOfWeek: number;
   available: number;
+}
+
+interface CartItem {
+  key: string; // class_id_date
+  occurrence: ClassOccurrence;
 }
 
 interface ScheduleModalProps {
@@ -34,18 +50,17 @@ interface ScheduleModalProps {
   initialModality?: string;
 }
 
-const LAUNCH_DATE = new Date(2026, 2, 30); // March 30, 2026
+const LAUNCH_DATE = new Date(2026, 2, 30);
 
 function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[] {
   const days: { date: string; dayOfWeek: number; label: string }[] = [];
   const now = new Date();
-  // Start from today or launch date, whichever is later
   const start = now >= LAUNCH_DATE ? now : LAUNCH_DATE;
-  
+
   for (let i = 0; days.length < 30; i++) {
     const candidate = new Date(start);
     candidate.setDate(start.getDate() + i);
-    const dow = candidate.getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
+    const dow = candidate.getDay();
     if (dow >= 1 && dow <= 6) {
       const yyyy = candidate.getFullYear();
       const mm = String(candidate.getMonth() + 1).padStart(2, "0");
@@ -58,9 +73,12 @@ function getNextWeekdays(): { date: string; dayOfWeek: number; label: string }[]
   return days;
 }
 
+const formatBRL = (cents: number) =>
+  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalProps) => {
-  const [step, setStep] = useState(1);
-  const [selectedOccurrence, setSelectedOccurrence] = useState<ClassOccurrence | null>(null);
+  const [step, setStep] = useState(1); // 1=seleção, 2=resumo, 3=dados, 4=pagamento
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
   const [templates, setTemplates] = useState<ClassTemplate[]>([]);
   const [suspSet, setSuspSet] = useState<Set<string>>(new Set());
@@ -68,10 +86,11 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
-  const [lastReservationId, setLastReservationId] = useState<string>("");
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
+
+  const promoActive = useMemo(() => isPromoActiveNow(), []);
 
   useEffect(() => {
     if (!open) return;
@@ -84,7 +103,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
       const dates = days.map((d) => d.date);
 
-      // Fetch templates, suspensions, and reservations in parallel
       const [templatesRes, suspensionsRes, reservationsRes] = await Promise.all([
         supabase.from("classes").select("*").order("time", { ascending: true }),
         supabase.from("class_suspensions").select("*").in("suspended_date", dates),
@@ -100,7 +118,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
         (suspensionsRes.data || []).map((s: { class_id: string; suspended_date: string }) => `${s.class_id}_${s.suspended_date}`)
       ));
 
-      // Count reservations per class+date
       const counts = new Map<string, number>();
       for (const r of (reservationsRes.data || []) as { class_id: string; class_date: string }[]) {
         const key = `${r.class_id}_${r.class_date}`;
@@ -116,40 +133,67 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
   const resetAndClose = () => {
     setStep(1);
-    setSelectedOccurrence(null);
+    setCart([]);
     setForm({ name: "", phone: "", email: "" });
     setSelectedDay("");
-    setLastReservationId("");
     setCheckoutUrl("");
     setWeekIndex(0);
     onOpenChange(false);
   };
 
-  // Split weekdays into weeks of 6 (Mon-Sat)
   const weeks: typeof weekdays[] = [];
   for (let i = 0; i < weekdays.length; i += 6) {
     weeks.push(weekdays.slice(i, i + 6));
   }
   const currentWeek = weeks[weekIndex] || [];
-  const weekLabel = currentWeek.length > 0
-    ? `Semana ${weekIndex + 1} de ${weeks.length}`
-    : "";
+  const weekLabel = currentWeek.length > 0 ? `Semana ${weekIndex + 1} de ${weeks.length}` : "";
 
-  const handleSelectTime = (occ: ClassOccurrence) => {
-    setSelectedOccurrence(occ);
-    setStep(2);
+  const toggleCartItem = (occ: ClassOccurrence) => {
+    const key = `${occ.template.id}_${occ.date}`;
+    setCart((prev) => {
+      const exists = prev.find((c) => c.key === key);
+      if (exists) return prev.filter((c) => c.key !== key);
+      if (prev.length >= 10) {
+        toast.error("Máximo de 10 reservas por pedido");
+        return prev;
+      }
+      return [...prev, { key, occurrence: occ }];
+    });
   };
+
+  const removeFromCart = (key: string) => {
+    setCart((prev) => prev.filter((c) => c.key !== key));
+  };
+
+  // Cálculo do total no front (espelha a lógica do servidor — servidor é a fonte da verdade)
+  const priceBreakdown = useMemo(() => {
+    if (cart.length === 0) return { total: 0, original: 0, savings: 0, comboApplied: false };
+    const prices = cart.map((c) => c.occurrence.template.price || REGULAR_PRICE_CENTS);
+    const original = prices.reduce((a, b) => a + b, 0);
+    let total = original;
+    let comboApplied = false;
+    if (promoActive && cart.length >= 2) {
+      comboApplied = true;
+      const sorted = [...prices].sort((a, b) => a - b);
+      total = COMBO_PRICE_CENTS + sorted.slice(2).reduce((a, b) => a + b, 0);
+    }
+    return { total, original, savings: original - total, comboApplied };
+  }, [cart, promoActive]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.email || !selectedOccurrence) return;
+    if (!form.name || !form.phone || !form.email || cart.length === 0) return;
 
     setSubmitting(true);
     try {
+      const items = cart.map((c) => ({
+        class_id: c.occurrence.template.id,
+        class_date: c.occurrence.date,
+      }));
+
       const { data, error } = await supabase.functions.invoke("reserve", {
         body: {
-          class_id: selectedOccurrence.template.id,
-          class_date: selectedOccurrence.date,
+          items,
           name: form.name,
           email: form.email,
           phone: form.phone,
@@ -160,9 +204,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       if (data?.error) throw new Error(data.error);
 
       if (data.checkout_url) {
-        setLastReservationId(data.reservation_id || "");
         setCheckoutUrl(data.checkout_url);
-        setStep(3);
+        setStep(4);
       } else {
         throw new Error("URL de checkout não disponível");
       }
@@ -185,38 +228,42 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       })
       .map((t) => {
         const reserved = reservationCounts.get(`${t.id}_${selectedDay}`) || 0;
-        return {
-          template: t,
-          date: selectedDay,
-          dayOfWeek: dayInfo.dayOfWeek,
-          available: t.capacity - reserved,
-        };
+        return { template: t, date: selectedDay, dayOfWeek: dayInfo.dayOfWeek, available: t.capacity - reserved };
       });
   })();
 
-  const formattedPrice = selectedOccurrence
-    ? (selectedOccurrence.template.price / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-    : "";
-
   const selectedDayLabel = weekdays.find((d) => d.date === selectedDay)?.label || "";
+  const isInCart = (occ: ClassOccurrence) => cart.some((c) => c.key === `${occ.template.id}_${occ.date}`);
 
   return (
     <Dialog open={open} onOpenChange={(v) => (!v ? resetAndClose() : onOpenChange(v))}>
-      <DialogContent className="bg-card border-border sm:max-w-md">
+      <DialogContent className="bg-card border-border sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
-            {step === 1 && (initialModality || "Escolha o horário")}
-            {step === 2 && "Seus dados"}
-            {step === 3 && "Finalize o pagamento"}
+            {step === 1 && (initialModality || "Escolha seus horários")}
+            {step === 2 && "Resumo do pedido"}
+            {step === 3 && "Seus dados"}
+            {step === 4 && "Finalize o pagamento"}
           </DialogTitle>
         </DialogHeader>
 
         {/* Progress */}
         <div className="flex gap-1 mb-2">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${s <= step ? "bg-primary" : "bg-muted"}`} />
           ))}
         </div>
+
+        {/* Banner promo (sempre visível durante a promo) */}
+        {promoActive && step === 1 && (
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-gradient-primary/10 border border-primary/30">
+            <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+            <div className="text-xs">
+              <p className="font-bold text-primary">Promo de maio: 2 aulas por R$39,90</p>
+              <p className="text-muted-foreground">Selecione 2 horários e o desconto é aplicado automaticamente.</p>
+            </div>
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {step === 1 && (
@@ -225,91 +272,193 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
               ) : (
                 <>
-                   {/* Week navigation */}
-                   <div className="flex items-center justify-between mb-2">
-                     <button
-                       onClick={() => setWeekIndex((i) => Math.max(0, i - 1))}
-                       disabled={weekIndex === 0}
-                       className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                     >
-                       <ChevronLeft className="w-4 h-4" />
-                     </button>
-                     <span className="text-xs text-muted-foreground font-medium">{weekLabel}</span>
-                     <button
-                       onClick={() => setWeekIndex((i) => Math.min(weeks.length - 1, i + 1))}
-                       disabled={weekIndex >= weeks.length - 1}
-                       className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                     >
-                       <ChevronRight className="w-4 h-4" />
-                     </button>
-                   </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      onClick={() => setWeekIndex((i) => Math.max(0, i - 1))}
+                      disabled={weekIndex === 0}
+                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-muted-foreground font-medium">{weekLabel}</span>
+                    <button
+                      onClick={() => setWeekIndex((i) => Math.min(weeks.length - 1, i + 1))}
+                      disabled={weekIndex >= weeks.length - 1}
+                      className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
 
-                   {/* Day buttons - one week at a time */}
-                   <div className="grid grid-cols-6 gap-1.5">
-                     {currentWeek.map((day) => {
-                       const [dayName, dateStr] = day.label.split(" ");
-                       const shortDay = dayName.slice(0, 3);
-                       return (
-                         <button
-                           key={day.date}
-                           onClick={() => setSelectedDay(day.date)}
-                           className={`flex flex-col items-center py-2 rounded-xl text-xs font-semibold transition-colors border ${
-                             selectedDay === day.date
-                               ? "bg-primary text-primary-foreground border-primary"
-                               : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
-                           }`}
-                         >
-                           <span className="text-[10px] uppercase">{shortDay}</span>
-                           <span className="text-sm font-bold">{dateStr}</span>
-                         </button>
-                       );
-                     })}
-                   </div>
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {currentWeek.map((day) => {
+                      const [dayName, dateStr] = day.label.split(" ");
+                      const shortDay = dayName.slice(0, 3);
+                      return (
+                        <button
+                          key={day.date}
+                          onClick={() => setSelectedDay(day.date)}
+                          className={`flex flex-col items-center py-2 rounded-xl text-xs font-semibold transition-colors border ${
+                            selectedDay === day.date
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase">{shortDay}</span>
+                          <span className="text-sm font-bold">{dateStr}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                   <p className="text-sm text-muted-foreground mt-2">Horários para {selectedDayLabel}:</p>
+                  <p className="text-sm text-muted-foreground mt-2">Horários para {selectedDayLabel}:</p>
 
                   {currentDayOccurrences.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">Nenhuma aula disponível neste dia</p>
                   )}
 
-                  {currentDayOccurrences.map((occ) => (
-                    <button
-                      key={`${occ.template.id}_${occ.date}`}
-                      disabled={occ.available <= 0}
-                      onClick={() => handleSelectTime(occ)}
-                      className={`w-full flex items-center justify-between p-4 rounded-xl border transition-colors ${
-                        occ.available <= 0
-                          ? "bg-muted/50 border-border opacity-50 cursor-not-allowed"
-                          : "bg-secondary border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <div className="text-left">
-                          <span className="font-semibold">{occ.template.time?.slice(0, 5)}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{occ.template.title}</span>
-                          {occ.template.instructor && (
-                            <p className="text-xs text-primary/80">Prof. {occ.template.instructor}</p>
+                  {currentDayOccurrences.map((occ) => {
+                    const inCart = isInCart(occ);
+                    const isFull = occ.available <= 0;
+                    return (
+                      <button
+                        key={`${occ.template.id}_${occ.date}`}
+                        disabled={isFull}
+                        onClick={() => toggleCartItem(occ)}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-colors ${
+                          isFull
+                            ? "bg-muted/50 border-border opacity-50 cursor-not-allowed"
+                            : inCart
+                              ? "bg-primary/15 border-primary"
+                              : "bg-secondary border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Clock className={`w-4 h-4 ${inCart ? "text-primary" : "text-primary"}`} />
+                          <div className="text-left">
+                            <span className="font-semibold">{occ.template.time?.slice(0, 5)}</span>
+                            <span className="text-xs text-muted-foreground ml-2">{occ.template.title}</span>
+                            {occ.template.instructor && (
+                              <p className="text-xs text-primary/80">Prof. {occ.template.instructor}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {inCart ? (
+                            <span className="text-xs font-bold text-primary">✓ Selecionada</span>
+                          ) : (
+                            <>
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              <span className={`text-sm ${isFull ? "text-destructive font-bold" : "text-muted-foreground"}`}>
+                                {isFull ? "Lotada" : `${occ.available} vagas`}
+                              </span>
+                            </>
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <span className={`text-sm ${occ.available <= 0 ? "text-destructive font-bold" : "text-muted-foreground"}`}>
-                          {occ.available <= 0 ? "Lotada" : `${occ.available} vagas`}
+                      </button>
+                    );
+                  })}
+
+                  {/* Mini-resumo flutuante */}
+                  {cart.length > 0 && (
+                    <div className="sticky bottom-0 -mx-6 px-6 pt-3 pb-1 bg-card border-t border-border">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">
+                          {cart.length} {cart.length === 1 ? "aula" : "aulas"} selecionada{cart.length === 1 ? "" : "s"}
+                        </span>
+                        <span className="font-bold text-lg">
+                          {priceBreakdown.comboApplied && (
+                            <span className="text-xs text-muted-foreground line-through mr-1">
+                              {formatBRL(priceBreakdown.original)}
+                            </span>
+                          )}
+                          {formatBRL(priceBreakdown.total)}
                         </span>
                       </div>
-                    </button>
-                  ))}
+                      <Button
+                        onClick={() => setStep(2)}
+                        className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-5 hover:scale-[1.02] transition-transform"
+                      >
+                        Continuar →
+                      </Button>
+                    </div>
+                  )}
                 </>
               )}
             </motion.div>
           )}
 
           {step === 2 && (
-            <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
+              {priceBreakdown.comboApplied && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/15 border border-primary">
+                  <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-bold text-primary">Combo aplicado: 2 aulas por R$39,90</p>
+                    <p className="text-muted-foreground">Você economizou {formatBRL(priceBreakdown.savings)}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {cart.map((c) => {
+                  const dayLabel = weekdays.find((d) => d.date === c.occurrence.date)?.label || c.occurrence.date;
+                  return (
+                    <div key={c.key} className="flex items-center justify-between p-3 rounded-xl bg-secondary border border-border">
+                      <div className="text-left text-sm">
+                        <p className="font-semibold">{c.occurrence.template.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {dayLabel} — {c.occurrence.template.time?.slice(0, 5)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeFromCart(c.key)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="Remover"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-border pt-3 space-y-1">
+                {priceBreakdown.comboApplied && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Subtotal sem promo</span>
+                    <span className="line-through">{formatBRL(priceBreakdown.original)}</span>
+                  </div>
+                )}
+                {priceBreakdown.savings > 0 && (
+                  <div className="flex justify-between text-xs text-primary">
+                    <span>Economia</span>
+                    <span>− {formatBRL(priceBreakdown.savings)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg pt-1">
+                  <span>Total</span>
+                  <span>{formatBRL(priceBreakdown.total)}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="ghost" onClick={() => setStep(1)} className="flex-1 text-muted-foreground">← Voltar</Button>
+                <Button
+                  onClick={() => setStep(3)}
+                  disabled={cart.length === 0}
+                  className="flex-1 bg-gradient-primary text-primary-foreground font-bold rounded-full hover:scale-[1.02] transition-transform"
+                >
+                  Continuar →
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <p className="text-sm text-muted-foreground mb-4">
-                {selectedOccurrence?.template.title} — {selectedDayLabel} — {selectedOccurrence?.template.time?.slice(0, 5)} — {formattedPrice}
+                {cart.length} {cart.length === 1 ? "aula" : "aulas"} — Total {formatBRL(priceBreakdown.total)}
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -325,24 +474,24 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="seu@email.com" className="bg-secondary border-border mt-1" required maxLength={255} />
                 </div>
                 <Button type="submit" disabled={submitting} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-6 hover:scale-[1.02] transition-transform">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar <ExternalLink className="w-4 h-4 ml-2" /></>}
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar {formatBRL(priceBreakdown.total)} <ExternalLink className="w-4 h-4 ml-2" /></>}
                 </Button>
-                <Button variant="ghost" type="button" onClick={() => setStep(1)} className="text-muted-foreground text-sm w-full">← Voltar</Button>
+                <Button variant="ghost" type="button" onClick={() => setStep(2)} className="text-muted-foreground text-sm w-full">← Voltar</Button>
               </form>
             </motion.div>
           )}
 
-          {step === 3 && (
-            <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
+          {step === 4 && (
+            <motion.div key="step4" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
                 <ExternalLink className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-lg font-bold mb-2">Reserva criada!</h3>
               <p className="text-muted-foreground text-sm mb-1">
-                {selectedOccurrence?.template.title} — {selectedDayLabel} — {selectedOccurrence?.template.time?.slice(0, 5)}
+                {cart.length} {cart.length === 1 ? "aula reservada" : "aulas reservadas"} — Total {formatBRL(priceBreakdown.total)}
               </p>
               <p className="text-muted-foreground text-sm mb-4">Clique no botão abaixo para realizar o pagamento:</p>
-              
+
               <a
                 href={checkoutUrl}
                 target="_blank"
