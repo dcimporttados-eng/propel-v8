@@ -71,13 +71,13 @@ Deno.serve(async (req) => {
       payer_email: payment.payer?.email,
     }));
 
-    const reservationId = payment.external_reference;
+    const externalRef = payment.external_reference as string | null;
     const mpStatus = payment.status; // approved, pending, rejected, cancelled, refunded
     const amount = Math.round((payment.transaction_amount || 0) * 100); // MP uses decimal, convert to cents
     const transactionId = String(payment.id);
     const payerEmail = payment.payer?.email?.toLowerCase() || null;
 
-    if (!reservationId) {
+    if (!externalRef) {
       console.error("No external_reference (reservation_id) in MP payment");
       return new Response(JSON.stringify({ received: true, warning: "no_reservation_ref" }), {
         status: 200,
@@ -85,15 +85,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch the reservation
-    const { data: reservation, error: resError } = await supabase
+    // external_reference pode ser CSV (combo/múltiplas reservas) ou ID único (legado)
+    const reservationIds = externalRef.split(",").map((s) => s.trim()).filter(Boolean);
+
+    const { data: reservations, error: resError } = await supabase
       .from("reservations")
       .select("id, class_id, user_id, status")
-      .eq("id", reservationId)
-      .maybeSingle();
+      .in("id", reservationIds);
 
-    if (resError || !reservation) {
-      console.error(`Reservation ${reservationId} not found: ${resError?.message}`);
+    if (resError || !reservations || reservations.length === 0) {
+      console.error(`Reservations [${externalRef}] not found: ${resError?.message}`);
       return new Response(JSON.stringify({ received: true, warning: "reservation_not_found" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -101,12 +102,10 @@ Deno.serve(async (req) => {
     }
 
     if (mpStatus === "approved") {
-      // If it was previously canceled (e.g., from a previous failed attempt webhook), re-confirm it
-      if (reservation.status === "canceled") {
-        console.log(`⚠️ Reservation ${reservation.id} was canceled but payment is now approved. Re-confirming.`);
-      }
-      
-      // Check if payment already exists
+      // Cria/atualiza um único payment vinculado à PRIMEIRA reserva como referência
+      // (todas as reservas do pedido apontam pro mesmo transaction_id via payment_id)
+      const firstReservation = reservations[0];
+
       const { data: existingPayment } = await supabase
         .from("payments")
         .select("id")
@@ -124,9 +123,9 @@ Deno.serve(async (req) => {
         const { data: newPayment, error: payError } = await supabase
           .from("payments")
           .insert({
-            user_id: reservation.user_id,
-            reservation_id: reservation.id,
-            amount,
+            user_id: firstReservation.user_id,
+            reservation_id: firstReservation.id,
+            amount, // valor TOTAL pago (combo já considerado)
             status: "paid",
             transaction_id: transactionId,
             paid_at: new Date().toISOString(),
@@ -144,22 +143,24 @@ Deno.serve(async (req) => {
         dbPaymentId = newPayment.id;
       }
 
-      // Confirm the reservation
+      // Confirma TODAS as reservas do pedido
       await supabase.from("reservations").update({
         status: "confirmed",
         payment_id: dbPaymentId,
-      }).eq("id", reservation.id);
+      }).in("id", reservationIds);
 
-      console.log(`✅ Reservation ${reservation.id} confirmed via Mercado Pago payment ${transactionId}`);
+      console.log(`✅ ${reservationIds.length} reserva(s) confirmada(s) via MP payment ${transactionId}`);
 
     } else if (mpStatus === "refunded" || mpStatus === "cancelled" || mpStatus === "rejected") {
-      // ONLY cancel if it's not already confirmed/paid
-      if (reservation.status === "confirmed") {
-        console.log(`⚠️ Ignored ${mpStatus} webhook for reservation ${reservation.id} because it's already confirmed/paid.`);
-      } else {
-        // Cancel the reservation
-        await supabase.from("reservations").update({ status: "canceled" }).eq("id", reservation.id);
-        console.log(`❌ Reservation ${reservation.id} canceled (MP status: ${mpStatus})`);
+      // Só cancela as que ainda não estão confirmadas
+      const cancelable = reservations.filter((r) => r.status !== "confirmed").map((r) => r.id);
+      const alreadyConfirmed = reservations.filter((r) => r.status === "confirmed");
+      if (alreadyConfirmed.length > 0) {
+        console.log(`⚠️ ${alreadyConfirmed.length} reserva(s) já confirmada(s) — ignoradas no ${mpStatus}`);
+      }
+      if (cancelable.length > 0) {
+        await supabase.from("reservations").update({ status: "canceled" }).in("id", cancelable);
+        console.log(`❌ ${cancelable.length} reserva(s) cancelada(s) (MP status: ${mpStatus})`);
       }
     } else {
       console.log(`⏳ Payment ${transactionId} status: ${mpStatus} — no action taken`);
