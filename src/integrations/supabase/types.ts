@@ -140,6 +140,7 @@ export type Database = {
         Row: {
           class_date: string | null
           class_id: string
+          combo_aplicado: boolean
           created_at: string
           id: string
           payment_id: string | null
@@ -149,6 +150,7 @@ export type Database = {
         Insert: {
           class_date?: string | null
           class_id: string
+          combo_aplicado?: boolean
           created_at?: string
           id?: string
           payment_id?: string | null
@@ -158,6 +160,7 @@ export type Database = {
         Update: {
           class_date?: string | null
           class_id?: string
+          combo_aplicado?: boolean
           created_at?: string
           id?: string
           payment_id?: string | null
