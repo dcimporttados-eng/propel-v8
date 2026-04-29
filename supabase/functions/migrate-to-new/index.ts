@@ -62,9 +62,16 @@ Deno.serve(async (req) => {
       });
       await c.connect();
       try {
-        await c.queryArray(sql);
-        return new Response(JSON.stringify({ ok: true }), {
+        // Use simple query protocol — supports multiple statements separated by ';'
+        // deno-postgres exposes this via queryArray with no params
+        const result = await c.queryArray(sql);
+        return new Response(JSON.stringify({ ok: true, rowCount: result.rowCount ?? null }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return new Response(JSON.stringify({ ok: false, error: msg }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } finally {
         await c.end();
