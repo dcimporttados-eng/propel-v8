@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Promo "Combo 2 aulas por R$39,90" — válida em maio/2026
-const PROMO_START = "2026-05-01";
+const PROMO_START = "2026-04-29";
 const PROMO_END = "2026-05-31";
 const COMBO_PRICE_CENTS = 3990; // R$39,90 total para 2 aulas
 const REGULAR_PRICE_CENTS = 2990; // R$29,90 por aula
