@@ -6,6 +6,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Promo "Combo 2 aulas por R$39,90" — válida em maio/2026
+const PROMO_START = "2026-05-01";
+const PROMO_END = "2026-05-31";
+const COMBO_PRICE_CENTS = 3990; // R$39,90 total para 2 aulas
+const REGULAR_PRICE_CENTS = 2990; // R$29,90 por aula
+
+function isPromoActive(today = new Date()): boolean {
+  const iso = today.toISOString().slice(0, 10);
+  return iso >= PROMO_START && iso <= PROMO_END;
+}
+
+interface CartItem {
+  class_id: string;
+  class_date?: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -17,40 +33,93 @@ Deno.serve(async (req) => {
     const mpAccessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { class_id, class_date, name, email, phone } = await req.json();
+    const payload = await req.json();
+    const { name, email, phone } = payload;
 
     const normalizedName = typeof name === "string" ? name.trim() : "";
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const normalizedPhone = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
 
-    if (!class_id || !normalizedName || !normalizedEmail || !normalizedPhone) {
+    // Aceita modo legado (class_id + class_date) ou novo (items[])
+    let items: CartItem[] = [];
+    if (Array.isArray(payload.items) && payload.items.length > 0) {
+      items = payload.items
+        .filter((it: CartItem) => it && typeof it.class_id === "string")
+        .map((it: CartItem) => ({ class_id: it.class_id, class_date: it.class_date }));
+    } else if (payload.class_id) {
+      items = [{ class_id: payload.class_id, class_date: payload.class_date }];
+    }
+
+    if (items.length === 0 || !normalizedName || !normalizedEmail || !normalizedPhone) {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: class_id, name, email, phone" }),
+        JSON.stringify({ error: "Campos obrigatórios: items, name, email, phone" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check available spots
-    const rpcParams: Record<string, unknown> = { p_class_id: class_id };
-    if (class_date) rpcParams.p_date = class_date;
-
-    const { data: spots, error: spotsError } = await supabase.rpc("get_available_spots", rpcParams);
-    if (spotsError) throw new Error(`Erro ao verificar vagas: ${spotsError.message}`);
-    if (spots <= 0) {
+    if (items.length > 10) {
       return new Response(
-        JSON.stringify({ error: "Aula lotada, não há vagas disponíveis" }),
+        JSON.stringify({ error: "Máximo de 10 reservas por pedido" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Detecta itens duplicados (mesma aula+data)
+    const seen = new Set<string>();
+    for (const it of items) {
+      const key = `${it.class_id}_${it.class_date || ""}`;
+      if (seen.has(key)) {
+        return new Response(
+          JSON.stringify({ error: "Há horários duplicados na seleção" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      seen.add(key);
+    }
+
+    // Verifica vagas e busca dados de cada aula em paralelo
+    const enriched = await Promise.all(items.map(async (it) => {
+      const rpcParams: Record<string, unknown> = { p_class_id: it.class_id };
+      if (it.class_date) rpcParams.p_date = it.class_date;
+      const [{ data: spots, error: spotsErr }, { data: cls, error: clsErr }] = await Promise.all([
+        supabase.rpc("get_available_spots", rpcParams),
+        supabase.from("classes").select("*").eq("id", it.class_id).single(),
+      ]);
+      if (spotsErr) throw new Error(`Erro ao verificar vagas: ${spotsErr.message}`);
+      if (clsErr || !cls) throw new Error("Aula não encontrada");
+      return { item: it, spots: spots as number, classData: cls };
+    }));
+
+    const lotada = enriched.find((e) => e.spots <= 0);
+    if (lotada) {
+      return new Response(
+        JSON.stringify({ error: `Aula "${lotada.classData.title}" lotada` }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get class info
-    const { data: classData, error: classError } = await supabase
-      .from("classes")
-      .select("*")
-      .eq("id", class_id)
-      .single();
-
-    if (classError || !classData) throw new Error("Aula não encontrada");
+    // ===== Cálculo de preço (server-side, fonte da verdade) =====
+    // Regra: combo R$39,90 nas 2 aulas mais baratas se houver 2+ itens e promo ativa.
+    // Demais aulas: R$29,90 cada.
+    const promoActive = isPromoActive();
+    const sortedByPriceAsc = [...enriched].sort(
+      (a, b) => (a.classData.price || REGULAR_PRICE_CENTS) - (b.classData.price || REGULAR_PRICE_CENTS)
+    );
+    const comboIds = new Set<string>();
+    let totalCents = 0;
+    if (promoActive && enriched.length >= 2) {
+      // 2 mais baratas viram combo
+      comboIds.add(`${sortedByPriceAsc[0].item.class_id}_${sortedByPriceAsc[0].item.class_date || ""}`);
+      comboIds.add(`${sortedByPriceAsc[1].item.class_id}_${sortedByPriceAsc[1].item.class_date || ""}`);
+      totalCents += COMBO_PRICE_CENTS;
+      for (let i = 2; i < sortedByPriceAsc.length; i++) {
+        totalCents += sortedByPriceAsc[i].classData.price || REGULAR_PRICE_CENTS;
+      }
+    } else {
+      for (const e of enriched) {
+        totalCents += e.classData.price || REGULAR_PRICE_CENTS;
+      }
+    }
 
     // Create or find user
     const { data: existingUser } = await supabase
@@ -73,28 +142,49 @@ Deno.serve(async (req) => {
       userId = newUser.id;
     }
 
-    // Create reservation (pending)
-    const reservationData: Record<string, unknown> = { user_id: userId, class_id, status: "pending" };
-    if (class_date) reservationData.class_date = class_date;
+    // Cria N reservas pendentes — marca combo_aplicado nas que entraram no combo
+    const rowsToInsert = enriched.map((e) => {
+      const key = `${e.item.class_id}_${e.item.class_date || ""}`;
+      const row: Record<string, unknown> = {
+        user_id: userId,
+        class_id: e.item.class_id,
+        status: "pending",
+        combo_aplicado: comboIds.has(key),
+      };
+      if (e.item.class_date) row.class_date = e.item.class_date;
+      return row;
+    });
 
-    const { data: reservation, error: resError } = await supabase
+    const { data: createdReservations, error: resError } = await supabase
       .from("reservations")
-      .insert(reservationData)
-      .select("id")
-      .single();
+      .insert(rowsToInsert)
+      .select("id");
 
-    if (resError || !reservation) throw new Error(`Erro ao criar reserva: ${resError?.message}`);
+    if (resError || !createdReservations || createdReservations.length === 0) {
+      throw new Error(`Erro ao criar reservas: ${resError?.message}`);
+    }
+
+    const reservationIds = createdReservations.map((r) => r.id);
+    // external_reference no formato CSV — webhook itera sobre todos
+    const externalReference = reservationIds.join(",");
 
     // Create Mercado Pago Checkout Pro preference
-    const priceInDecimal = classData.price / 100; // DB stores in cents, MP expects decimal
+    const totalDecimal = totalCents / 100;
     const webhookUrl = `${supabaseUrl}/functions/v1/webhook-mercadopago`;
+
+    const isCombo = promoActive && enriched.length >= 2;
+    const itemsTitle = isCombo
+      ? `Combo 2 aulas + ${enriched.length - 2} avulsa(s)`.replace(" + 0 avulsa(s)", "")
+      : enriched.length === 1
+        ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
+        : `${enriched.length} aulas — Pavilhão 8`;
 
     const preference = {
       items: [
         {
-          title: `${classData.title} — ${class_date || ""}`,
+          title: itemsTitle,
           quantity: 1,
-          unit_price: priceInDecimal,
+          unit_price: totalDecimal,
           currency_id: "BRL",
         },
       ],
@@ -102,12 +192,12 @@ Deno.serve(async (req) => {
         email: normalizedEmail,
         name: normalizedName,
       },
-      external_reference: reservation.id,
+      external_reference: externalReference,
       notification_url: webhookUrl,
       back_urls: {
-        success: `https://propel-v8.lovable.app/confirmacao?src=${reservation.id}&status=approved`,
-        failure: `https://propel-v8.lovable.app/confirmacao?src=${reservation.id}&status=failed`,
-        pending: `https://propel-v8.lovable.app/confirmacao?src=${reservation.id}&status=pending`,
+        success: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=approved`,
+        failure: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=failed`,
+        pending: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=pending`,
       },
       auto_return: "approved",
       statement_descriptor: "PAVILHAO8",
@@ -136,9 +226,12 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        reservation_id: reservation.id,
+        reservation_id: reservationIds[0],
+        reservation_ids: reservationIds,
         checkout_url: mpData.init_point,
-        class_title: classData.title,
+        class_title: itemsTitle,
+        total_cents: totalCents,
+        combo_applied: isCombo,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -1,0 +1,2 @@
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS combo_aplicado BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_reservations_combo ON public.reservations(combo_aplicado) WHERE combo_aplicado = true;
