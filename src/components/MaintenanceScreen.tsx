@@ -10,7 +10,7 @@ const MAINTENANCE_END = (() => {
   return d;
 })();
 
-export const isUnderMaintenance = () => false;
+export const isUnderMaintenance = () => true;
 
 const MaintenanceScreen = () => {
   const [now, setNow] = useState(new Date());
