@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle, FileDown } from "lucide-react";
+import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle, FileDown, UserPlus, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -55,13 +55,20 @@ const AdminDashboard = () => {
   const [saving, setSaving] = useState<string | null>(null);
   const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
   const [adding, setAdding] = useState(false);
-  const [activeTab, setActiveTab] = useState<"templates" | "suspensions" | "reservations">("templates");
+  const [activeTab, setActiveTab] = useState<"templates" | "suspensions" | "reservations" | "weekly">("templates");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [weeklyReservations, setWeeklyReservations] = useState<Map<string, Reservation[]>>(new Map());
+  const [loadingWeekly, setLoadingWeekly] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<{ classId: string; date: string; label: string } | null>(null);
   const [suspendDate, setSuspendDate] = useState("");
   const [suspendClassId, setSuspendClassId] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"confirmed" | "pending" | "all">("confirmed");
   const [filterClassId, setFilterClassId] = useState("");
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualForm, setManualForm] = useState({ name: "", email: "", phone: "", classId: "", classDate: "", transactionCode: "" });
 
   const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
@@ -180,11 +187,63 @@ const AdminDashboard = () => {
     setLoadingReservations(false);
   };
 
+  const getWeekDates = (offset: number) => {
+    const today = new Date();
+    const monday = new Date(today);
+    const day = today.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    monday.setDate(today.getDate() + diff + offset * 7);
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return { date: `${yyyy}-${mm}-${dd}`, dow: i + 1, label: `${["Seg","Ter","Qua","Qui","Sex","Sáb"][i]} ${dd}/${mm}` };
+    });
+  };
+
+  const fetchWeeklyReservations = async (offset: number) => {
+    setLoadingWeekly(true);
+    const dates = getWeekDates(offset).map((d) => d.date);
+    const { data: resData } = await supabase
+      .from("reservations")
+      .select("*")
+      .in("status", ["confirmed", "pending"])
+      .in("class_date", dates);
+
+    if (!resData || resData.length === 0) {
+      setWeeklyReservations(new Map());
+      setLoadingWeekly(false);
+      return;
+    }
+
+    const userIds = [...new Set(resData.map((r) => r.user_id))];
+    const { data: usersData } = await supabase.from("users").select("id, name, email, phone").in("id", userIds);
+    const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
+
+    const map = new Map<string, Reservation[]>();
+    for (const r of resData) {
+      const user = usersMap.get(r.user_id);
+      const key = `${r.class_id}_${r.class_date}`;
+      const enriched = { ...r, user_name: user?.name || "?", user_email: user?.email || "?", user_phone: user?.phone || "" };
+      map.set(key, [...(map.get(key) || []), enriched]);
+    }
+    setWeeklyReservations(map);
+    setLoadingWeekly(false);
+  };
+
   useEffect(() => {
     if (authenticated && activeTab === "reservations") {
       fetchReservations();
     }
   }, [authenticated, activeTab, filterDate, filterStatus, filterClassId]);
+
+  useEffect(() => {
+    if (authenticated && activeTab === "weekly") {
+      fetchWeeklyReservations(weekOffset);
+    }
+  }, [authenticated, activeTab, weekOffset]);
 
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
@@ -373,6 +432,71 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleManualReservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { name, email, phone, classId, classDate, transactionCode } = manualForm;
+    if (!name.trim() || !email.trim() || !classId || !classDate) {
+      toast.error("Preencha nome, e-mail, aula e data");
+      return;
+    }
+    setSavingManual(true);
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPhone = phone.replace(/\D/g, "");
+
+      // 1. Buscar usuário existente por e-mail
+      let userId: string | null = null;
+      const { data: existingUsers } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .limit(1);
+
+      if (existingUsers && existingUsers.length > 0) {
+        userId = existingUsers[0].id;
+      } else {
+        // 2. Criar novo usuário
+        const { data: newUser, error: userErr } = await supabase
+          .from("users")
+          .insert({ name: name.trim(), email: normalizedEmail, phone: normalizedPhone || null })
+          .select("id")
+          .single();
+        if (userErr || !newUser) throw new Error("Erro ao criar usuário: " + userErr?.message);
+        userId = newUser.id;
+      }
+
+      // 3. Criar reserva confirmada
+      const { data: newRes, error: resErr } = await supabase
+        .from("reservations")
+        .insert({ user_id: userId, class_id: classId, class_date: classDate, status: "confirmed" })
+        .select("id")
+        .single();
+      if (resErr || !newRes) throw new Error("Erro ao criar reserva: " + resErr?.message);
+
+      // 4. Criar pagamento manual
+      const cls = templates.find((t) => t.id === classId);
+      const txId = transactionCode.trim() || `MANUAL-${newRes.id.slice(0, 8)}`;
+      const { data: newPay, error: payErr } = await supabase
+        .from("payments")
+        .insert({ reservation_id: newRes.id, user_id: userId, amount: cls?.price ?? 0, status: "paid", transaction_id: txId, paid_at: new Date().toISOString() })
+        .select("id")
+        .single();
+      if (payErr || !newPay) throw new Error("Erro ao criar pagamento: " + payErr?.message);
+
+      // 5. Vincular payment_id à reserva
+      await supabase.from("reservations").update({ payment_id: newPay.id }).eq("id", newRes.id);
+
+      toast.success("Reserva manual criada com sucesso!");
+      setManualForm({ name: "", email: "", phone: "", classId: "", classDate: "", transactionCode: "" });
+      setShowManualForm(false);
+      fetchReservations();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro desconhecido");
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
   const updateTemplate = (id: string, field: string, value: string | number | null) => {
     setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   };
@@ -482,7 +606,7 @@ const AdminDashboard = () => {
       </button>
 
       <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-        <DialogContent className="bg-card border-border sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">
               {authenticated ? "Gerenciar Aulas" : "Acesso Restrito"}
@@ -511,6 +635,9 @@ const AdminDashboard = () => {
                 </Button>
                 <Button variant={activeTab === "reservations" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("reservations")} className="rounded-full text-xs">
                   <Users className="w-3.5 h-3.5 mr-1" /> Reservas
+                </Button>
+                <Button variant={activeTab === "weekly" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("weekly")} className="rounded-full text-xs">
+                  <Calendar className="w-3.5 h-3.5 mr-1" /> Semana
                 </Button>
               </div>
 
@@ -686,11 +813,211 @@ const AdminDashboard = () => {
                 </div>
               )}
 
+              {activeTab === "weekly" && (() => {
+                const weekDates = getWeekDates(weekOffset);
+                const uniqueTimes = [...new Set(templates.map((t) => t.time?.slice(0, 5)))].sort();
+                const cellStudents = selectedCell ? (weeklyReservations.get(`${selectedCell.classId}_${selectedCell.date}`) || []) : [];
+
+                return (
+                  <div className="space-y-3">
+                    {/* Navegação de semana */}
+                    <div className="flex items-center justify-between">
+                      <Button variant="outline" size="sm" onClick={() => setWeekOffset((o) => o - 1)} className="h-8 px-3">
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm font-medium">
+                        {weekOffset === 0 ? "Semana atual" : weekOffset > 0 ? `+${weekOffset} semana${weekOffset > 1 ? "s" : ""}` : `${weekOffset} semana${weekOffset < -1 ? "s" : ""}`}
+                        {" · "}{weekDates[0].label.split(" ")[1]} – {weekDates[5].label.split(" ")[1]}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={() => setWeekOffset((o) => o + 1)} className="h-8 px-3">
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+
+                    {loadingWeekly ? (
+                      <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs border-collapse min-w-[520px]">
+                          <thead>
+                            <tr>
+                              <th className="p-2 text-left text-muted-foreground font-medium w-14">Hora</th>
+                              {weekDates.map((d) => {
+                                const isToday = d.date === new Date().toISOString().slice(0, 10);
+                                return (
+                                  <th key={d.date} className={`p-2 text-center font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                                    {d.label}
+                                  </th>
+                                );
+                              })}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {uniqueTimes.map((time) => (
+                              <tr key={time} className="border-t border-border">
+                                <td className="p-2 text-muted-foreground font-mono">{time}</td>
+                                {weekDates.map((d) => {
+                                  const cls = templates.find((t) => t.time?.slice(0, 5) === time && (!t.day_of_week || t.day_of_week === d.dow));
+                                  if (!cls) return <td key={d.date} className="p-1" />;
+
+                                  const key = `${cls.id}_${d.date}`;
+                                  const reservas = weeklyReservations.get(key) || [];
+                                  const confirmed = reservas.filter((r) => r.status === "confirmed").length;
+                                  const pending = reservas.filter((r) => r.status === "pending").length;
+                                  const total = cls.capacity;
+                                  const full = confirmed >= total;
+                                  const isSelected = selectedCell?.classId === cls.id && selectedCell?.date === d.date;
+
+                                  return (
+                                    <td key={d.date} className="p-1">
+                                      <button
+                                        onClick={() => setSelectedCell(isSelected ? null : { classId: cls.id, date: d.date, label: `${d.label} · ${time}` })}
+                                        className={`w-full rounded-lg p-2 text-left transition-colors border ${
+                                          isSelected
+                                            ? "border-primary bg-primary/10"
+                                            : full
+                                              ? "border-destructive/40 bg-destructive/5 hover:bg-destructive/10"
+                                              : "border-border bg-secondary hover:bg-secondary/60"
+                                        }`}
+                                      >
+                                        <div className="font-medium truncate">{cls.instructor || cls.title}</div>
+                                        <div className={`mt-0.5 font-bold ${full ? "text-destructive" : "text-primary"}`}>
+                                          {confirmed}/{total}
+                                          {pending > 0 && <span className="text-muted-foreground font-normal"> +{pending}p</span>}
+                                        </div>
+                                      </button>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Painel de alunos da célula selecionada */}
+                    {selectedCell && (
+                      <div className="border-t border-border pt-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold">{selectedCell.label}</h3>
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedCell(null)} className="h-7 px-2 text-xs">Fechar</Button>
+                        </div>
+                        {cellStudents.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-3">Nenhuma reserva neste horário</p>
+                        ) : (
+                          cellStudents.map((r) => {
+                            const paid = r.status === "confirmed";
+                            return (
+                              <div key={r.id} className="flex items-center justify-between p-2.5 bg-secondary rounded-lg border border-border">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${paid ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                      {paid ? "Pago" : "Aguardando"}
+                                    </span>
+                                    <span className="text-sm font-medium">{r.user_name}</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{r.user_email} {r.user_phone && `· ${r.user_phone}`}</p>
+                                </div>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  onClick={async () => {
+                                    if (!confirm("Cancelar esta reserva?")) return;
+                                    const { error } = await supabase.from("reservations").update({ status: "canceled" }).eq("id", r.id);
+                                    if (error) toast.error("Erro: " + error.message);
+                                    else {
+                                      toast.success("Reserva cancelada!");
+                                      fetchWeeklyReservations(weekOffset);
+                                      setSelectedCell(null);
+                                    }
+                                  }}
+                                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {activeTab === "reservations" && (
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    Apenas reservas <strong>pagas (confirmadas)</strong> aparecem por padrão. Use os filtros para ver pendentes ou todos.
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Apenas reservas <strong>pagas (confirmadas)</strong> aparecem por padrão. Use os filtros para ver pendentes ou todos.
+                    </p>
+                    <Button size="sm" onClick={() => setShowManualForm((v) => !v)} className="h-8 px-3 text-xs bg-primary text-primary-foreground shrink-0 ml-2">
+                      <UserPlus className="w-3.5 h-3.5 mr-1" /> Nova Reserva
+                    </Button>
+                  </div>
+
+                  {/* Manual reservation form */}
+                  {showManualForm && (
+                    <form onSubmit={handleManualReservation} className="p-4 bg-secondary rounded-xl border border-primary/30 space-y-3">
+                      <h3 className="font-semibold text-sm flex items-center gap-2"><UserPlus className="w-4 h-4 text-primary" /> Reserva Manual</h3>
+                      <p className="text-xs text-muted-foreground">Para trocar de dia: cancele a reserva antiga e crie uma nova aqui. A reserva já sai confirmada e paga.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Nome do aluno *</Label>
+                          <Input value={manualForm.name} onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })} placeholder="Nome completo" className="bg-background border-border mt-1 h-9 text-sm" required />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">E-mail *</Label>
+                          <Input type="email" value={manualForm.email} onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })} placeholder="email@exemplo.com" className="bg-background border-border mt-1 h-9 text-sm" required />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Telefone</Label>
+                          <Input value={manualForm.phone} onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })} placeholder="51999999999" className="bg-background border-border mt-1 h-9 text-sm" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Data da aula *</Label>
+                          <Input type="date" value={manualForm.classDate} onChange={(e) => setManualForm({ ...manualForm, classDate: e.target.value, classId: "" })} className="bg-background border-border mt-1 h-9 text-sm" required />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Horário *</Label>
+                          <select
+                            value={manualForm.classId}
+                            onChange={(e) => setManualForm({ ...manualForm, classId: e.target.value })}
+                            className="w-full h-9 mt-1 rounded-md border border-border bg-background px-3 text-sm"
+                            required
+                          >
+                            <option value="">Selecione...</option>
+                            {templates
+                              .filter((t) => {
+                                if (!manualForm.classDate) return true;
+                                const selectedDay = new Date(`${manualForm.classDate}T12:00:00`).getDay();
+                                const dbDay = selectedDay === 0 ? 7 : selectedDay;
+                                return !t.day_of_week || t.day_of_week === dbDay;
+                              })
+                              .map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Código de transação (opcional)</Label>
+                          <Input value={manualForm.transactionCode} onChange={(e) => setManualForm({ ...manualForm, transactionCode: e.target.value })} placeholder="Ex: PIX-12345 ou deixe vazio" className="bg-background border-border mt-1 h-9 text-sm" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" onClick={() => setShowManualForm(false)} className="flex-1 h-9 text-xs rounded-full">Cancelar</Button>
+                        <Button type="submit" disabled={savingManual} className="flex-1 h-9 text-xs bg-gradient-primary text-primary-foreground font-bold rounded-full">
+                          {savingManual ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Criar Reserva Confirmada"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
 
                   {/* Status filter tabs */}
                   <div className="flex gap-1.5">
