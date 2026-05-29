@@ -71,6 +71,7 @@ const Confirmacao = () => {
 
   const handleConfirm = async () => {
     if (!reservation) return;
+    if (confirming) return;
     setConfirming(true);
 
     // Get price
