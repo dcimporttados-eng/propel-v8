@@ -133,29 +133,20 @@ const AdminDashboard = () => {
   const fetchReservations = async () => {
     setLoadingReservations(true);
 
-    let reservationsQuery = supabase
-      .from("reservations")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-
-    if (filterStatus === "confirmed") {
-      reservationsQuery = reservationsQuery.eq("status", "confirmed");
-    } else if (filterStatus === "pending") {
-      reservationsQuery = reservationsQuery.eq("status", "pending");
-    } else {
-      reservationsQuery = reservationsQuery.in("status", ["pending", "confirmed", "canceled"]);
+    let resData: Reservation[] = [];
+    try {
+      const res = await adminCall<{ data: Reservation[] }>("list_reservations", {
+        status: filterStatus,
+        classDate: filterDate || undefined,
+        classId: filterClassId || undefined,
+        limit: 200,
+      });
+      resData = res.data || [];
+    } catch (e) {
+      toast.error("Erro ao carregar reservas: " + (e instanceof Error ? e.message : "?"));
+      setLoadingReservations(false);
+      return;
     }
-
-    if (filterDate) {
-      reservationsQuery = reservationsQuery.eq("class_date", filterDate);
-    }
-
-    if (filterClassId) {
-      reservationsQuery = reservationsQuery.eq("class_id", filterClassId);
-    }
-
-    const { data: resData } = await reservationsQuery;
 
     if (!resData || resData.length === 0) {
       setReservations([]);
@@ -168,21 +159,20 @@ const AdminDashboard = () => {
     const classIds = [...new Set(resData.map((r) => r.class_id))];
     const reservationIds = [...new Set(resData.map((r) => r.id))];
 
-    const [usersRes, classesRes, paymentsRes] = await Promise.all([
-      fetchUsersByIds(userIds).then((users) => ({ data: users })),
+    const [usersData, classesRes, paymentsRes] = await Promise.all([
+      fetchUsersByIds(userIds),
       supabase.from("classes").select("id, title, time").in("id", classIds),
-      supabase
-        .from("payments")
-        .select("reservation_id, status, transaction_id, paid_at, created_at")
-        .in("reservation_id", reservationIds)
-        .order("created_at", { ascending: false }),
+      adminCall<{ data: { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
+        "list_payments_for_reservations",
+        { reservationIds },
+      ).catch(() => ({ data: [] })),
     ]);
 
-    const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
+    const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
     const classesMap = new Map((classesRes.data || []).map((c) => [c.id, c]));
 
     const paymentsMap = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
-    for (const p of (paymentsRes.data || []) as { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[]) {
+    for (const p of (paymentsRes.data || [])) {
       // payments are ordered by created_at desc, so first entry is the latest
       if (!paymentsMap.has(p.reservation_id)) {
         paymentsMap.set(p.reservation_id, {
@@ -234,11 +224,15 @@ const AdminDashboard = () => {
   const fetchWeeklyReservations = async (offset: number) => {
     setLoadingWeekly(true);
     const dates = getWeekDates(offset).map((d) => d.date);
-    const { data: resData } = await supabase
-      .from("reservations")
-      .select("*")
-      .in("status", ["confirmed", "pending"])
-      .in("class_date", dates);
+    let resData: Reservation[] = [];
+    try {
+      const r = await adminCall<{ data: Reservation[] }>("list_weekly_reservations", { dates });
+      resData = r.data || [];
+    } catch (e) {
+      toast.error("Erro ao carregar semana: " + (e instanceof Error ? e.message : "?"));
+      setLoadingWeekly(false);
+      return;
+    }
 
     if (!resData || resData.length === 0) {
       setWeeklyReservations(new Map());
