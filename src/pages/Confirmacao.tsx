@@ -34,36 +34,33 @@ const Confirmacao = () => {
     }
 
     const fetchReservation = async () => {
-      const { data: res, error: resError } = await supabase
-        .from("reservations")
-        .select("id, status, class_id, user_id, class_date")
-        .eq("id", reservationId)
-        .maybeSingle();
-
-      if (resError || !res) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke(
+          `get-reservation-public?id=${encodeURIComponent(reservationId)}`,
+          { method: "GET" },
+        );
+        if (fnError || !data || data.error) {
+          setError("Reserva não encontrada.");
+          setLoading(false);
+          return;
+        }
+        setReservation({
+          id: data.id,
+          status: data.status,
+          class_id: data.class_id,
+          class_title: data.class_title,
+          class_time: data.class_time,
+          class_date: data.class_date,
+          user_id: "",
+          user_name: data.user_first_name,
+          user_email: data.user_email_masked,
+          already_confirmed: data.status === "confirmed",
+        });
+      } catch (_e) {
         setError("Reserva não encontrada.");
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const [userRes, classRes] = await Promise.all([
-        supabase.from("users").select("name, email").eq("id", res.user_id).maybeSingle(),
-        supabase.from("classes").select("title, time, price").eq("id", res.class_id).maybeSingle(),
-      ]);
-
-      setReservation({
-        id: res.id,
-        status: res.status,
-        class_id: res.class_id,
-        class_title: classRes.data?.title || "Aula",
-        class_time: classRes.data?.time?.slice(0, 5) || "",
-        class_date: res.class_date,
-        user_id: res.user_id,
-        user_name: userRes.data?.name || "",
-        user_email: userRes.data?.email || "",
-        already_confirmed: res.status === "confirmed",
-      });
-      setLoading(false);
     };
 
     fetchReservation();
