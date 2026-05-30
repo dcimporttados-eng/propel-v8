@@ -97,6 +97,16 @@ const AdminDashboard = () => {
     return users[0] || null;
   };
 
+  const adminCall = async <T = unknown>(action: string, payload: Record<string, unknown> = {}) => {
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action, payload },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data as T;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const hashed = await hashPassword(password);
