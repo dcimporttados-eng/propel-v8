@@ -79,6 +79,24 @@ const AdminDashboard = () => {
     return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
   };
 
+  const fetchUsersByIds = async (ids: string[]) => {
+    if (ids.length === 0) return [] as { id: string; name: string; email: string; phone: string | null }[];
+    const { data } = await supabase.functions.invoke("admin-users", {
+      body: { ids },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    return (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
+  };
+
+  const fetchUserByEmail = async (email: string) => {
+    const { data } = await supabase.functions.invoke("admin-users", {
+      body: { email },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    const users = (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
+    return users[0] || null;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const hashed = await hashPassword(password);
@@ -141,7 +159,7 @@ const AdminDashboard = () => {
     const reservationIds = [...new Set(resData.map((r) => r.id))];
 
     const [usersRes, classesRes, paymentsRes] = await Promise.all([
-      supabase.from("users").select("id, name, email, phone").in("id", userIds),
+      fetchUsersByIds(userIds).then((users) => ({ data: users })),
       supabase.from("classes").select("id, title, time").in("id", classIds),
       supabase
         .from("payments")
@@ -219,7 +237,7 @@ const AdminDashboard = () => {
     }
 
     const userIds = [...new Set(resData.map((r) => r.user_id))];
-    const { data: usersData } = await supabase.from("users").select("id, name, email, phone").in("id", userIds);
+    const usersData = await fetchUsersByIds(userIds);
     const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
 
     const map = new Map<string, Reservation[]>();
@@ -446,14 +464,9 @@ const AdminDashboard = () => {
 
       // 1. Buscar usuário existente por e-mail
       let userId: string | null = null;
-      const { data: existingUsers } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", normalizedEmail)
-        .limit(1);
-
-      if (existingUsers && existingUsers.length > 0) {
-        userId = existingUsers[0].id;
+      const existingUser = await fetchUserByEmail(normalizedEmail);
+      if (existingUser) {
+        userId = existingUser.id;
       } else {
         // 2. Criar novo usuário
         const { data: newUser, error: userErr } = await supabase
