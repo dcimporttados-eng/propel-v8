@@ -226,6 +226,14 @@ export type Database = {
       get_available_spots:
         | { Args: { p_class_id: string }; Returns: number }
         | { Args: { p_class_id: string; p_date?: string }; Returns: number }
+      get_class_occupancy: {
+        Args: { p_dates: string[] }
+        Returns: {
+          class_date: string
+          class_id: string
+          confirmed_count: number
+        }[]
+      }
     }
     Enums: {
       payment_status: "pending" | "paid" | "failed"
