@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
       // Buscar todas reservas confirmadas a partir de hoje
       const { data: reservas, error: errRes } = await supabase
         .from("reservations")
-        .select("id, class_date, user_id, payment_id, combo_aplicado, classes(title, time), users(name, phone, email)")
+        .select("id, class_id, class_date, user_id, payment_id, classes(title, time, capacity), users(name, phone)")
         .eq("status", "confirmed")
         .gte("class_date", todayIso)
         .order("class_date", { ascending: true });
@@ -80,64 +80,73 @@ Deno.serve(async (req) => {
         return t >= nowHHMM;
       });
 
-      // Busca os pagamentos das reservas
+      // Valor arrecadado por dia (via payments)
       const paymentIds = Array.from(new Set(futuras.map((r: any) => r.payment_id).filter(Boolean)));
       const paymentsMap = new Map<string, any>();
       if (paymentIds.length > 0) {
         const { data: pays } = await supabase
           .from("payments")
-          .select("id, transaction_id, amount")
+          .select("id, amount")
           .in("id", paymentIds);
         for (const p of pays || []) paymentsMap.set(p.id, p);
       }
 
-      // Agrupa por payment_id (mesmo booking/combo). Sem payment_id → agrupa por user+created.
-      const groups = new Map<string, any[]>();
+      // Agrupa por dia → por aula (class_id+time+title)
+      type Aula = { time: string; title: string; capacity: number; alunos: { name: string; phone: string }[] };
+      const porDia = new Map<string, { aulas: Map<string, Aula>; total: number; valor: number; pagamentosContados: Set<string> }>();
+
       for (const r of futuras) {
-        const key = r.payment_id || `user:${r.user_id}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(r);
+        const dia = r.class_date as string;
+        if (!porDia.has(dia)) porDia.set(dia, { aulas: new Map(), total: 0, valor: 0, pagamentosContados: new Set() });
+        const entry = porDia.get(dia)!;
+        const t = (r.classes?.time || "").slice(0, 5);
+        const titulo = r.classes?.title || "Aula";
+        const key = `${t}__${titulo}`;
+        if (!entry.aulas.has(key)) {
+          entry.aulas.set(key, { time: t, title: titulo, capacity: r.classes?.capacity ?? 0, alunos: [] });
+        }
+        entry.aulas.get(key)!.alunos.push({
+          name: r.users?.name || "—",
+          phone: r.users?.phone || "",
+        });
+        entry.total++;
+        // Valor: conta cada pagamento uma vez (combo = 1 pagamento p/ 2 reservas)
+        if (r.payment_id && !entry.pagamentosContados.has(r.payment_id)) {
+          const pay = paymentsMap.get(r.payment_id);
+          if (pay?.amount) entry.valor += pay.amount;
+          entry.pagamentosContados.add(r.payment_id);
+        }
       }
 
       const dataBr = now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
       const horaBr = now.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 
+      const totalReservas = futuras.length;
+      const totalValor = Array.from(porDia.values()).reduce((s, d) => s + d.valor, 0);
+
       const header =
         `📦 <b>Backup ${dataBr} às ${horaBr}</b>\n` +
-        `Total: <b>${futuras.length}</b> reserva(s) — <b>${groups.size}</b> cliente(s)\n` +
+        `<b>${totalReservas}</b> reserva(s) • <b>${porDia.size}</b> dia(s) • <b>${fmtMoney(totalValor)}</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━`;
 
+      const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
       const blocks: string[] = [];
-      // Ordena grupos pela aula mais próxima
-      const ordered = Array.from(groups.entries()).sort((a, b) => {
-        const da = a[1][0]; const db = b[1][0];
-        const ka = `${da.class_date} ${(da.classes?.time || "").slice(0, 5)}`;
-        const kb = `${db.class_date} ${(db.classes?.time || "").slice(0, 5)}`;
-        return ka.localeCompare(kb);
-      });
+      const diasOrdenados = Array.from(porDia.keys()).sort();
 
-      for (const [key, rs] of ordered) {
-        const u = (rs[0] as any).users || {};
-        const pay = key.startsWith("user:") ? null : paymentsMap.get(key);
-        const combo = rs.some((r: any) => r.combo_aplicado);
-        const linhas = rs
-          .sort((a: any, b: any) => `${a.class_date} ${a.classes?.time || ""}`.localeCompare(`${b.class_date} ${b.classes?.time || ""}`))
-          .map((r: any) => {
-            const t = (r.classes?.time || "").slice(0, 5);
-            return `  📅 ${fmtDateBR(r.class_date)} às ${t} — ${escapeHtml(r.classes?.title || "Aula")}`;
-          })
-          .join("\n");
-        const valor = pay?.amount != null ? `💰 ${fmtMoney(pay.amount)}${combo ? " (combo)" : ""}\n` : "";
-        const mp = pay?.transaction_id ? `🆔 MP: ${escapeHtml(pay.transaction_id)}\n` : "";
-        const block =
-          `\n✅ <b>Reserva Confirmada</b>\n` +
-          `👤 ${escapeHtml(u.name || "—")}\n` +
-          (u.phone ? `📱 ${escapeHtml(u.phone)}\n` : "") +
-          (u.email ? `✉️ ${escapeHtml(u.email)}\n` : "") +
-          valor +
-          `${linhas}\n` +
-          mp;
-        blocks.push(block);
+      for (const dia of diasOrdenados) {
+        const entry = porDia.get(dia)!;
+        const [yy, mm, dd] = dia.split("-").map(Number);
+        const dow = DIAS_SEMANA[new Date(yy, mm - 1, dd).getDay()];
+        let bloco = `\n📅 <b>${fmtDateBR(dia)} (${dow})</b> — ${entry.total} reserva(s) • ${fmtMoney(entry.valor)}\n`;
+        bloco += `─────────────────────────────\n`;
+        const aulasOrd = Array.from(entry.aulas.values()).sort((a, b) => a.time.localeCompare(b.time));
+        for (const a of aulasOrd) {
+          bloco += `🕐 <b>${a.time} ${escapeHtml(a.title)}</b> — ${a.alunos.length}/${a.capacity} vagas\n`;
+          for (const al of a.alunos) {
+            bloco += `  • ${escapeHtml(al.name)}${al.phone ? ` — ${escapeHtml(al.phone)}` : ""}\n`;
+          }
+        }
+        blocks.push(bloco);
       }
 
       if (blocks.length === 0) {
