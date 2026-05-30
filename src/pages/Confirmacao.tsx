@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Check, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
+import { Check, Loader2, AlertCircle, ArrowLeft, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const Confirmacao = () => {
   const [searchParams] = useSearchParams();
@@ -11,7 +10,6 @@ const Confirmacao = () => {
   const reservationId = searchParams.get("src") || searchParams.get("reservation_id");
 
   const [loading, setLoading] = useState(true);
-  const [confirming, setConfirming] = useState(false);
   const [reservation, setReservation] = useState<{
     id: string;
     status: string;
@@ -19,7 +17,6 @@ const Confirmacao = () => {
     class_title: string;
     class_time: string;
     class_date: string | null;
-    user_id: string;
     user_name: string;
     user_email: string;
     already_confirmed: boolean;
@@ -33,99 +30,60 @@ const Confirmacao = () => {
       return;
     }
 
-    const fetchReservation = async () => {
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 20; // ~40s de polling
+
+    const fetchReservation = async (isPoll = false) => {
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
           `get-reservation-public?id=${encodeURIComponent(reservationId)}`,
           { method: "GET" },
         );
         if (fnError || !data || data.error) {
-          setError("Reserva não encontrada.");
-          setLoading(false);
-          return;
+          if (!isPoll) {
+            setError("Reserva não encontrada.");
+            setLoading(false);
+          }
+          return null;
         }
-        setReservation({
+        const next = {
           id: data.id,
           status: data.status,
           class_id: data.class_id,
           class_title: data.class_title,
           class_time: data.class_time,
           class_date: data.class_date,
-          user_id: "",
           user_name: data.user_first_name,
           user_email: data.user_email_masked,
           already_confirmed: data.status === "confirmed",
-        });
+        };
+        if (!cancelled) setReservation(next);
+        return next;
       } catch (_e) {
-        setError("Reserva não encontrada.");
+        if (!isPoll) setError("Reserva não encontrada.");
+        return null;
       } finally {
-        setLoading(false);
+        if (!isPoll) setLoading(false);
       }
     };
 
-    fetchReservation();
+    (async () => {
+      const initial = await fetchReservation(false);
+      if (!initial || initial.status === "confirmed") return;
+      // Poll enquanto pendente — aguarda webhook do Mercado Pago
+      while (!cancelled && attempts < maxAttempts) {
+        attempts++;
+        await new Promise((r) => setTimeout(r, 2000));
+        const r = await fetchReservation(true);
+        if (r?.status === "confirmed") return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [reservationId]);
-
-  const handleConfirm = async () => {
-    if (!reservation) return;
-    if (confirming) return;
-    setConfirming(true);
-
-    // Get price
-    const { data: classData } = await supabase
-      .from("classes")
-      .select("price")
-      .eq("id", reservation.class_id)
-      .maybeSingle();
-    const amount = classData?.price ?? 0;
-
-    // Check if payment already exists
-    const { data: existingPayment } = await supabase
-      .from("payments")
-      .select("id")
-      .eq("reservation_id", reservation.id)
-      .maybeSingle();
-
-    let paymentId: string | null = null;
-
-    if (existingPayment) {
-      await supabase
-        .from("payments")
-        .update({ status: "paid", paid_at: new Date().toISOString() })
-        .eq("id", existingPayment.id);
-      paymentId = existingPayment.id;
-    } else {
-      const { data: newPayment } = await supabase
-        .from("payments")
-        .insert({
-          reservation_id: reservation.id,
-          user_id: reservation.user_id,
-          amount,
-          status: "paid",
-          transaction_id: `USER-CONFIRMED-${reservation.id.slice(0, 8)}`,
-          paid_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-      paymentId = newPayment?.id ?? null;
-    }
-
-    // Update reservation
-    const { error: updateError } = await supabase
-      .from("reservations")
-      .update({ status: "confirmed", payment_id: paymentId })
-      .eq("id", reservation.id);
-
-    if (updateError) {
-      toast.error("Erro ao confirmar. Tente novamente.");
-      setConfirming(false);
-      return;
-    }
-
-    setReservation((prev) => prev ? { ...prev, status: "confirmed", already_confirmed: true } : prev);
-    setConfirming(false);
-    toast.success("Pagamento confirmado!");
-  };
 
   const formattedDate = reservation?.class_date
     ? new Date(`${reservation.class_date}T12:00:00`).toLocaleDateString("pt-BR", {
@@ -171,7 +129,10 @@ const Confirmacao = () => {
           </div>
         ) : (
           <div className="bg-card border border-border rounded-2xl p-8 text-center space-y-6">
-            <h1 className="text-2xl font-bold text-foreground">Confirme seu pagamento</h1>
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto">
+              <Clock className="w-8 h-8 text-primary animate-pulse" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Aguardando confirmação do pagamento</h1>
             <div className="bg-secondary rounded-xl p-4 space-y-1">
               <p className="text-lg font-semibold text-foreground">{reservation?.class_title}</p>
               {formattedDate && <p className="text-muted-foreground capitalize">{formattedDate}</p>}
@@ -179,19 +140,11 @@ const Confirmacao = () => {
               <p className="text-sm text-muted-foreground mt-2">{reservation?.user_name} · {reservation?.user_email}</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Após realizar o pagamento na Cakto, clique no botão abaixo para confirmar sua reserva.
+              Assim que o Mercado Pago confirmar seu pagamento, sua reserva aparecerá aqui automaticamente. Se você ainda não pagou, retorne ao checkout. Caso já tenha pago, aguarde alguns instantes.
             </p>
-            <Button
-              onClick={handleConfirm}
-              disabled={confirming}
-              className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-6 text-lg hover:scale-[1.02] transition-transform"
-            >
-              {confirming ? (
-                <><Loader2 className="w-5 h-5 animate-spin mr-2" /> Confirmando...</>
-              ) : (
-                <><Check className="w-5 h-5 mr-2" /> Já paguei — confirmar reserva</>
-              )}
-            </Button>
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Verificando pagamento...
+            </div>
             <Button onClick={() => navigate("/")} variant="ghost" className="text-muted-foreground text-sm">
               <ArrowLeft className="w-4 h-4 mr-2" /> Voltar ao início
             </Button>
