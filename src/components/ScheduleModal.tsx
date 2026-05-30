@@ -106,7 +106,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       const [templatesRes, suspensionsRes, reservationsRes] = await Promise.all([
         supabase.from("classes").select("*").order("time", { ascending: true }),
         supabase.from("class_suspensions").select("*").in("suspended_date", dates),
-        supabase.rpc("get_class_occupancy", { p_dates: dates }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase.rpc as any)("get_class_occupancy", { p_dates: dates }),
       ]);
 
       const allTemplates = ((templatesRes.data || []) as ClassTemplate[]).filter(
