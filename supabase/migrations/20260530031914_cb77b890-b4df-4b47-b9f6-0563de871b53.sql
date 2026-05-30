@@ -1,0 +1,1 @@
+DELETE FROM classes WHERE id IN ('90bb2ad3-530b-4645-a099-286713d772bc', '815aa41f-4fbd-493c-b00f-b329a049a4f2');
