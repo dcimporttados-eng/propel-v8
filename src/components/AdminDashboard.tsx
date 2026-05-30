@@ -464,14 +464,9 @@ const AdminDashboard = () => {
 
       // 1. Buscar usuário existente por e-mail
       let userId: string | null = null;
-      const { data: existingUsers } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", normalizedEmail)
-        .limit(1);
-
-      if (existingUsers && existingUsers.length > 0) {
-        userId = existingUsers[0].id;
+      const existingUser = await fetchUserByEmail(normalizedEmail);
+      if (existingUser) {
+        userId = existingUser.id;
       } else {
         // 2. Criar novo usuário
         const { data: newUser, error: userErr } = await supabase
