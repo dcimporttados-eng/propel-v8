@@ -159,7 +159,7 @@ const AdminDashboard = () => {
     const reservationIds = [...new Set(resData.map((r) => r.id))];
 
     const [usersRes, classesRes, paymentsRes] = await Promise.all([
-      supabase.from("users").select("id, name, email, phone").in("id", userIds),
+      fetchUsersByIds(userIds).then((users) => ({ data: users })),
       supabase.from("classes").select("id, title, time").in("id", classIds),
       supabase
         .from("payments")
@@ -237,7 +237,7 @@ const AdminDashboard = () => {
     }
 
     const userIds = [...new Set(resData.map((r) => r.user_id))];
-    const { data: usersData } = await supabase.from("users").select("id, name, email, phone").in("id", userIds);
+    const usersData = await fetchUsersByIds(userIds);
     const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
 
     const map = new Map<string, Reservation[]>();
