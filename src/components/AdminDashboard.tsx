@@ -851,12 +851,13 @@ const AdminDashboard = () => {
                                   size="sm" variant="ghost"
                                   onClick={async () => {
                                     if (!confirm("Cancelar esta reserva?")) return;
-                                    const { error } = await supabase.from("reservations").update({ status: "canceled" }).eq("id", r.id);
-                                    if (error) toast.error("Erro: " + error.message);
-                                    else {
+                                    try {
+                                      await adminCall("cancel_reservation", { id: r.id });
                                       toast.success("Reserva cancelada!");
                                       fetchWeeklyReservations(weekOffset);
                                       setSelectedCell(null);
+                                    } catch (e) {
+                                      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
                                     }
                                   }}
                                   className="h-7 px-2 text-xs text-destructive hover:text-destructive"
