@@ -106,7 +106,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       const [templatesRes, suspensionsRes, reservationsRes] = await Promise.all([
         supabase.from("classes").select("*").order("time", { ascending: true }),
         supabase.from("class_suspensions").select("*").in("suspended_date", dates),
-        supabase.from("reservations").select("class_id, class_date").eq("status", "confirmed").in("class_date", dates),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase.rpc as any)("get_class_occupancy", { p_dates: dates }),
       ]);
 
       const allTemplates = ((templatesRes.data || []) as ClassTemplate[]).filter(
@@ -119,9 +120,9 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       ));
 
       const counts = new Map<string, number>();
-      for (const r of (reservationsRes.data || []) as { class_id: string; class_date: string }[]) {
+      for (const r of (reservationsRes.data || []) as { class_id: string; class_date: string; confirmed_count: number }[]) {
         const key = `${r.class_id}_${r.class_date}`;
-        counts.set(key, (counts.get(key) || 0) + 1);
+        counts.set(key, r.confirmed_count);
       }
       setReservationCounts(counts);
 

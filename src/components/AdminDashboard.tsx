@@ -97,6 +97,16 @@ const AdminDashboard = () => {
     return users[0] || null;
   };
 
+  const adminCall = async <T = unknown>(action: string, payload: Record<string, unknown> = {}) => {
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action, payload },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data as T;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const hashed = await hashPassword(password);
@@ -123,29 +133,20 @@ const AdminDashboard = () => {
   const fetchReservations = async () => {
     setLoadingReservations(true);
 
-    let reservationsQuery = supabase
-      .from("reservations")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-
-    if (filterStatus === "confirmed") {
-      reservationsQuery = reservationsQuery.eq("status", "confirmed");
-    } else if (filterStatus === "pending") {
-      reservationsQuery = reservationsQuery.eq("status", "pending");
-    } else {
-      reservationsQuery = reservationsQuery.in("status", ["pending", "confirmed", "canceled"]);
+    let resData: Reservation[] = [];
+    try {
+      const res = await adminCall<{ data: Reservation[] }>("list_reservations", {
+        status: filterStatus,
+        classDate: filterDate || undefined,
+        classId: filterClassId || undefined,
+        limit: 200,
+      });
+      resData = res.data || [];
+    } catch (e) {
+      toast.error("Erro ao carregar reservas: " + (e instanceof Error ? e.message : "?"));
+      setLoadingReservations(false);
+      return;
     }
-
-    if (filterDate) {
-      reservationsQuery = reservationsQuery.eq("class_date", filterDate);
-    }
-
-    if (filterClassId) {
-      reservationsQuery = reservationsQuery.eq("class_id", filterClassId);
-    }
-
-    const { data: resData } = await reservationsQuery;
 
     if (!resData || resData.length === 0) {
       setReservations([]);
@@ -158,21 +159,20 @@ const AdminDashboard = () => {
     const classIds = [...new Set(resData.map((r) => r.class_id))];
     const reservationIds = [...new Set(resData.map((r) => r.id))];
 
-    const [usersRes, classesRes, paymentsRes] = await Promise.all([
-      fetchUsersByIds(userIds).then((users) => ({ data: users })),
+    const [usersData, classesRes, paymentsRes] = await Promise.all([
+      fetchUsersByIds(userIds),
       supabase.from("classes").select("id, title, time").in("id", classIds),
-      supabase
-        .from("payments")
-        .select("reservation_id, status, transaction_id, paid_at, created_at")
-        .in("reservation_id", reservationIds)
-        .order("created_at", { ascending: false }),
+      adminCall<{ data: { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
+        "list_payments_for_reservations",
+        { reservationIds },
+      ).catch(() => ({ data: [] })),
     ]);
 
-    const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
+    const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
     const classesMap = new Map((classesRes.data || []).map((c) => [c.id, c]));
 
     const paymentsMap = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
-    for (const p of (paymentsRes.data || []) as { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[]) {
+    for (const p of (paymentsRes.data || [])) {
       // payments are ordered by created_at desc, so first entry is the latest
       if (!paymentsMap.has(p.reservation_id)) {
         paymentsMap.set(p.reservation_id, {
@@ -224,11 +224,15 @@ const AdminDashboard = () => {
   const fetchWeeklyReservations = async (offset: number) => {
     setLoadingWeekly(true);
     const dates = getWeekDates(offset).map((d) => d.date);
-    const { data: resData } = await supabase
-      .from("reservations")
-      .select("*")
-      .in("status", ["confirmed", "pending"])
-      .in("class_date", dates);
+    let resData: Reservation[] = [];
+    try {
+      const r = await adminCall<{ data: Reservation[] }>("list_weekly_reservations", { dates });
+      resData = r.data || [];
+    } catch (e) {
+      toast.error("Erro ao carregar semana: " + (e instanceof Error ? e.message : "?"));
+      setLoadingWeekly(false);
+      return;
+    }
 
     if (!resData || resData.length === 0) {
       setWeeklyReservations(new Map());
@@ -265,9 +269,9 @@ const AdminDashboard = () => {
 
   const handleSave = async (t: ClassTemplate) => {
     setSaving(t.id);
-    const { error } = await supabase
-      .from("classes")
-      .update({
+    try {
+      await adminCall("update_class", {
+        id: t.id,
         title: t.title,
         time: t.time,
         capacity: t.capacity,
@@ -275,20 +279,22 @@ const AdminDashboard = () => {
         day_of_week: t.day_of_week,
         instructor: t.instructor,
         checkout_url: t.checkout_url,
-      })
-      .eq("id", t.id);
-    if (error) toast.error("Erro: " + error.message);
-    else toast.success("Salvo!");
+      });
+      toast.success("Salvo!");
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
+    }
     setSaving(null);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Excluir este horário?")) return;
-    const { error } = await supabase.from("classes").delete().eq("id", id);
-    if (error) toast.error("Erro: " + error.message);
-    else {
+    try {
+      await adminCall("delete_class", { id });
       setTemplates((prev) => prev.filter((t) => t.id !== id));
       toast.success("Excluído!");
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
     }
   };
 
@@ -299,9 +305,8 @@ const AdminDashboard = () => {
       return;
     }
     setAdding(true);
-    const { data, error } = await supabase
-      .from("classes")
-      .insert({
+    try {
+      const res = await adminCall<{ data: ClassTemplate }>("insert_class", {
         title: newTemplate.title,
         time: newTemplate.time,
         capacity: newTemplate.capacity,
@@ -309,29 +314,27 @@ const AdminDashboard = () => {
         day_of_week: newTemplate.day_of_week === 0 ? null : newTemplate.day_of_week,
         instructor: newTemplate.instructor || null,
         checkout_url: newTemplate.checkout_url || null,
-        date: null as unknown as string,
-      })
-      .select()
-      .single();
-    if (error) toast.error("Erro: " + error.message);
-    else if (data) {
-      setTemplates((prev) => [...prev, data as ClassTemplate]);
-      setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
-      toast.success("Horário criado!");
+        date: null,
+      });
+      if (res?.data) {
+        setTemplates((prev) => [...prev, res.data]);
+        setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
+        toast.success("Horário criado!");
+      }
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
     }
     setAdding(false);
   };
 
   const handleCancelReservation = async (resId: string) => {
     if (!confirm("Cancelar esta reserva?")) return;
-    const { error } = await supabase
-      .from("reservations")
-      .update({ status: "canceled" })
-      .eq("id", resId);
-    if (error) toast.error("Erro: " + error.message);
-    else {
+    try {
+      await adminCall("cancel_reservation", { id: resId });
       setReservations((prev) => prev.map((r) => (r.id === resId ? { ...r, status: "canceled" } : r)));
       toast.success("Reserva cancelada!");
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
     }
   };
 
@@ -343,82 +346,24 @@ const AdminDashboard = () => {
     }
 
     const manualCode = window.prompt("Código/transação do pagamento (opcional)")?.trim();
-    const transactionId = manualCode || `MANUAL-CAKTO-${reservation.id.slice(0, 8)}`;
-    const amount = templates.find((t) => t.id === reservation.class_id)?.price ?? 0;
-    const paidAt = new Date().toISOString();
-
-    const { data: existingPayment, error: existingPaymentError } = await supabase
-      .from("payments")
-      .select("id")
-      .eq("reservation_id", reservation.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existingPaymentError) {
-      toast.error("Erro ao buscar pagamento: " + existingPaymentError.message);
-      return;
+    try {
+      const result = await adminCall<{ ok: boolean; transactionId: string; paidAt: string }>("mark_paid", {
+        reservationId: reservation.id,
+        userId: reservation.user_id,
+        classId: reservation.class_id,
+        transactionCode: manualCode,
+      });
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === reservation.id
+            ? { ...r, status: "confirmed", payment_status: "paid", transaction_id: result.transactionId, paid_at: result.paidAt }
+            : r
+        )
+      );
+      toast.success("Pagamento confirmado manualmente");
+    } catch (e) {
+      toast.error("Erro ao confirmar: " + (e instanceof Error ? e.message : "?"));
     }
-
-    let paymentId = existingPayment?.id ?? null;
-
-    if (paymentId) {
-      const { error: paymentUpdateError } = await supabase
-        .from("payments")
-        .update({
-          status: "paid",
-          transaction_id: transactionId,
-          paid_at: paidAt,
-          amount,
-          user_id: reservation.user_id,
-        })
-        .eq("id", paymentId);
-
-      if (paymentUpdateError) {
-        toast.error("Erro ao atualizar pagamento: " + paymentUpdateError.message);
-        return;
-      }
-    } else {
-      const { data: createdPayment, error: paymentInsertError } = await supabase
-        .from("payments")
-        .insert({
-          reservation_id: reservation.id,
-          user_id: reservation.user_id,
-          amount,
-          status: "paid",
-          transaction_id: transactionId,
-          paid_at: paidAt,
-        })
-        .select("id")
-        .single();
-
-      if (paymentInsertError || !createdPayment) {
-        toast.error("Erro ao registrar pagamento: " + (paymentInsertError?.message || "Erro desconhecido"));
-        return;
-      }
-
-      paymentId = createdPayment.id;
-    }
-
-    const { error: reservationUpdateError } = await supabase
-      .from("reservations")
-      .update({ status: "confirmed", payment_id: paymentId })
-      .eq("id", reservation.id);
-
-    if (reservationUpdateError) {
-      toast.error("Erro ao confirmar reserva: " + reservationUpdateError.message);
-      return;
-    }
-
-    setReservations((prev) =>
-      prev.map((r) =>
-        r.id === reservation.id
-          ? { ...r, status: "confirmed", payment_status: "paid", transaction_id: transactionId, paid_at: paidAt }
-          : r
-      )
-    );
-
-    toast.success("Pagamento confirmado manualmente");
   };
   const handleSuspend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -426,27 +371,29 @@ const AdminDashboard = () => {
       toast.error("Selecione o horário e a data");
       return;
     }
-    const { data, error } = await supabase
-      .from("class_suspensions")
-      .insert({ class_id: suspendClassId, suspended_date: suspendDate })
-      .select()
-      .single();
-    if (error) {
-      if (error.code === "23505") toast.error("Essa data já está suspensa para esse horário");
-      else toast.error("Erro: " + error.message);
-    } else if (data) {
-      setSuspensions((prev) => [...prev, data as Suspension]);
-      setSuspendDate("");
-      toast.success("Aula suspensa!");
+    try {
+      const res = await adminCall<{ data: Suspension; code?: string }>("insert_suspension", {
+        class_id: suspendClassId, suspended_date: suspendDate,
+      });
+      if (res?.data) {
+        setSuspensions((prev) => [...prev, res.data]);
+        setSuspendDate("");
+        toast.success("Aula suspensa!");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "?";
+      if (msg.includes("23505") || msg.includes("duplicate")) toast.error("Essa data já está suspensa para esse horário");
+      else toast.error("Erro: " + msg);
     }
   };
 
   const handleUnsuspend = async (id: string) => {
-    const { error } = await supabase.from("class_suspensions").delete().eq("id", id);
-    if (error) toast.error("Erro: " + error.message);
-    else {
+    try {
+      await adminCall("delete_suspension", { id });
       setSuspensions((prev) => prev.filter((s) => s.id !== id));
       toast.success("Suspensão removida!");
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
     }
   };
 
@@ -459,46 +406,14 @@ const AdminDashboard = () => {
     }
     setSavingManual(true);
     try {
-      const normalizedEmail = email.trim().toLowerCase();
-      const normalizedPhone = phone.replace(/\D/g, "");
-
-      // 1. Buscar usuário existente por e-mail
-      let userId: string | null = null;
-      const existingUser = await fetchUserByEmail(normalizedEmail);
-      if (existingUser) {
-        userId = existingUser.id;
-      } else {
-        // 2. Criar novo usuário
-        const { data: newUser, error: userErr } = await supabase
-          .from("users")
-          .insert({ name: name.trim(), email: normalizedEmail, phone: normalizedPhone || null })
-          .select("id")
-          .single();
-        if (userErr || !newUser) throw new Error("Erro ao criar usuário: " + userErr?.message);
-        userId = newUser.id;
-      }
-
-      // 3. Criar reserva confirmada
-      const { data: newRes, error: resErr } = await supabase
-        .from("reservations")
-        .insert({ user_id: userId, class_id: classId, class_date: classDate, status: "confirmed" })
-        .select("id")
-        .single();
-      if (resErr || !newRes) throw new Error("Erro ao criar reserva: " + resErr?.message);
-
-      // 4. Criar pagamento manual
-      const cls = templates.find((t) => t.id === classId);
-      const txId = transactionCode.trim() || `MANUAL-${newRes.id.slice(0, 8)}`;
-      const { data: newPay, error: payErr } = await supabase
-        .from("payments")
-        .insert({ reservation_id: newRes.id, user_id: userId, amount: cls?.price ?? 0, status: "paid", transaction_id: txId, paid_at: new Date().toISOString() })
-        .select("id")
-        .single();
-      if (payErr || !newPay) throw new Error("Erro ao criar pagamento: " + payErr?.message);
-
-      // 5. Vincular payment_id à reserva
-      await supabase.from("reservations").update({ payment_id: newPay.id }).eq("id", newRes.id);
-
+      await adminCall("manual_reservation", {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.replace(/\D/g, ""),
+        classId,
+        classDate,
+        transactionCode: transactionCode.trim(),
+      });
       toast.success("Reserva manual criada com sucesso!");
       setManualForm({ name: "", email: "", phone: "", classId: "", classDate: "", transactionCode: "" });
       setShowManualForm(false);
@@ -936,12 +851,13 @@ const AdminDashboard = () => {
                                   size="sm" variant="ghost"
                                   onClick={async () => {
                                     if (!confirm("Cancelar esta reserva?")) return;
-                                    const { error } = await supabase.from("reservations").update({ status: "canceled" }).eq("id", r.id);
-                                    if (error) toast.error("Erro: " + error.message);
-                                    else {
+                                    try {
+                                      await adminCall("cancel_reservation", { id: r.id });
                                       toast.success("Reserva cancelada!");
                                       fetchWeeklyReservations(weekOffset);
                                       setSelectedCell(null);
+                                    } catch (e) {
+                                      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
                                     }
                                   }}
                                   className="h-7 px-2 text-xs text-destructive hover:text-destructive"
