@@ -151,6 +151,27 @@ Deno.serve(async (req) => {
 
       console.log(`✅ ${reservationIds.length} reserva(s) confirmada(s) via MP payment ${transactionId}`);
 
+      // Notificação Telegram (fire-and-forget — nunca bloqueia resposta pro MP)
+      try {
+        const notifyUrl = `${supabaseUrl}/functions/v1/telegram-notify`;
+        fetch(notifyUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({
+            type: "reservation",
+            reservation_ids: reservationIds,
+            transaction_id: transactionId,
+            total_cents: amount,
+            combo_applied: reservationIds.length >= 2,
+          }),
+        }).catch((e) => console.error("telegram-notify dispatch error:", e));
+      } catch (e) {
+        console.error("telegram-notify trigger error:", e);
+      }
+
     } else if (mpStatus === "refunded" || mpStatus === "cancelled" || mpStatus === "rejected") {
       // Só cancela as que ainda não estão confirmadas
       const cancelable = reservations.filter((r) => r.status !== "confirmed").map((r) => r.id);
