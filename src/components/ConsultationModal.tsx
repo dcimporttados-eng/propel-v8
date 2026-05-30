@@ -36,62 +36,11 @@ const ConsultationModal = ({ open, onOpenChange }: ConsultationModalProps) => {
     setLoading(true);
     setHasSearched(false);
     try {
-      const cleanIdentifier = identifier.trim();
-      const digitsOnly = cleanIdentifier.replace(/\D/g, "");
-      
-      let orClause = `email.ilike.${cleanIdentifier}`;
-      if (digitsOnly.length >= 8) {
-        // Trata o prefixo 55 se o usuário digitou mas não está no banco (ou vice-versa)
-        let searchDigits = digitsOnly;
-        if (digitsOnly.startsWith("55") && digitsOnly.length > 10) {
-          searchDigits = digitsOnly.substring(2);
-        }
-        // Usamos % no início para lidar com possíveis prefixos que restarem
-        orClause += `,phone.ilike.%${searchDigits}`;
-      } else {
-        orClause += `,phone.eq.${cleanIdentifier}`;
-      }
-
-      const { data: users, error: userError } = await supabase
-        .from("users")
-        .select("id")
-        .or(orClause);
-
-      if (userError) throw userError;
-
-      if (!users || users.length === 0) {
-        setReservations([]);
-        setHasSearched(true);
-        return;
-      }
-
-      const userIds = users.map(u => u.id);
-
-      const { data: resData, error: resError } = await supabase
-        .from("reservations")
-        .select(`
-          id,
-          class_date,
-          status,
-          classes (
-            title,
-            time
-          )
-        `)
-        .in("user_id", userIds)
-        .neq("status", "canceled")
-        .order("class_date", { ascending: false });
-
-      if (resError) throw resError;
-
-      const data = (resData as any[]) || [];
-      // Filtra para mostrar apenas confirmadas (futuras e passadas) e pendentes futuras
-      const filtered = data.filter(res => {
-        const isPast = isPastDate(res.class_date);
-        if (isPast && res.status === 'pending') return false;
-        return true;
+      const { data, error } = await supabase.functions.invoke("consult-reservations", {
+        body: { identifier: identifier.trim() },
       });
-      setReservations(filtered);
+      if (error) throw error;
+      setReservations((data?.reservations || []) as Reservation[]);
       setHasSearched(true);
     } catch (err: any) {
       console.error("Search error:", err);
