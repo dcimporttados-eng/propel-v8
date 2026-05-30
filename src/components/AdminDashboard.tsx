@@ -79,6 +79,24 @@ const AdminDashboard = () => {
     return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
   };
 
+  const fetchUsersByIds = async (ids: string[]) => {
+    if (ids.length === 0) return [] as { id: string; name: string; email: string; phone: string | null }[];
+    const { data } = await supabase.functions.invoke("admin-users", {
+      body: { ids },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    return (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
+  };
+
+  const fetchUserByEmail = async (email: string) => {
+    const { data } = await supabase.functions.invoke("admin-users", {
+      body: { email },
+      headers: { "x-admin-hash": ADMIN_HASH },
+    });
+    const users = (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
+    return users[0] || null;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const hashed = await hashPassword(password);
