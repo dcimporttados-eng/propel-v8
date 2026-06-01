@@ -111,7 +111,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
       ]);
 
       const allTemplates = ((templatesRes.data || []) as ClassTemplate[]).filter(
-        (t) => !initialModality || t.title === initialModality
+        (t) => !initialModality || t.title?.trim().toLowerCase() === initialModality.trim().toLowerCase()
       );
       setTemplates(allTemplates);
 
