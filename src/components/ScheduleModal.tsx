@@ -260,7 +260,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           <div className="flex items-start gap-2 p-3 rounded-xl bg-gradient-primary/10 border border-primary/30">
             <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
             <div className="text-xs">
-              <p className="font-bold text-primary">Promo de maio: 2 aulas por R$39,90</p>
+              <p className="font-bold text-primary">Promo: 2 aulas por R$39,90</p>
               <p className="text-muted-foreground">Selecione 2 horários e o desconto é aplicado automaticamente.</p>
             </div>
           </div>
