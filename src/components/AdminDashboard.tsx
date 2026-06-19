@@ -1077,6 +1077,7 @@ const AdminDashboard = () => {
                       {visibleReservations.map((r) => {
                         const paid = r.status === "confirmed" || r.payment_status === "paid";
                         const canceled = r.status === "canceled";
+                        const isManual = !!r.transaction_id && r.transaction_id.startsWith("MANUAL-");
 
                          const isPast = isPastDate(r.class_date);
  
@@ -1104,6 +1105,16 @@ const AdminDashboard = () => {
                                   }`}
                                 >
                                   {canceled ? "Cancelada" : paid ? "Pago" : "Aguardando pagamento"}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                    isManual
+                                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                                      : "bg-sky-500/15 text-sky-400 border border-sky-500/30"
+                                  }`}
+                                  title={isManual ? "Reserva criada manualmente pelo admin" : "Reserva feita pelo aluno no site"}
+                                >
+                                  {isManual ? "Manual" : "Site"}
                                 </span>
                                 <span className="text-sm font-medium truncate">{r.user_name}</span>
                               </div>
