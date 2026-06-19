@@ -33,6 +33,7 @@ interface Reservation {
   status: string;
   created_at: string;
   user_id: string;
+  payment_id?: string | null;
   user_name?: string;
   user_email?: string;
   user_phone?: string;
@@ -158,13 +159,18 @@ const AdminDashboard = () => {
     const userIds = [...new Set(resData.map((r) => r.user_id))];
     const classIds = [...new Set(resData.map((r) => r.class_id))];
     const reservationIds = [...new Set(resData.map((r) => r.id))];
+    const paymentIds = [...new Set(resData.map((r) => r.payment_id).filter(Boolean) as string[])];
 
-    const [usersData, classesRes, paymentsRes] = await Promise.all([
+    const [usersData, classesRes, paymentsRes, paymentsByIdRes] = await Promise.all([
       fetchUsersByIds(userIds),
       supabase.from("classes").select("id, title, time").in("id", classIds),
       adminCall<{ data: { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
         "list_payments_for_reservations",
         { reservationIds },
+      ).catch(() => ({ data: [] })),
+      adminCall<{ data: { id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
+        "list_payments_by_ids",
+        { paymentIds },
       ).catch(() => ({ data: [] })),
     ]);
 
@@ -182,11 +188,16 @@ const AdminDashboard = () => {
         });
       }
     }
+    // Combo: payment guarda só a 1ª reserva; resolve via reservations.payment_id
+    const paymentsByIdMap = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
+    for (const p of (paymentsByIdRes.data || [])) {
+      paymentsByIdMap.set(p.id, { status: p.status, transaction_id: p.transaction_id, paid_at: p.paid_at });
+    }
 
     const enriched: Reservation[] = resData.map((r) => {
       const user = usersMap.get(r.user_id);
       const cls = classesMap.get(r.class_id);
-      const payment = paymentsMap.get(r.id);
+      const payment = paymentsMap.get(r.id) || (r.payment_id ? paymentsByIdMap.get(r.payment_id) : undefined);
 
       return {
         ...r,

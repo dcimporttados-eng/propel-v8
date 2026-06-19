@@ -112,9 +112,19 @@ Deno.serve(async (req) => {
         const { reservationIds } = payload as { reservationIds: string[] };
         const { data, error } = await supabase
           .from("payments")
-          .select("reservation_id, status, transaction_id, paid_at, created_at")
+          .select("id, reservation_id, status, transaction_id, paid_at, created_at")
           .in("reservation_id", reservationIds)
           .order("created_at", { ascending: false });
+        if (error) throw error;
+        return json({ data });
+      }
+      case "list_payments_by_ids": {
+        const { paymentIds } = payload as { paymentIds: string[] };
+        if (!paymentIds || paymentIds.length === 0) return json({ data: [] });
+        const { data, error } = await supabase
+          .from("payments")
+          .select("id, status, transaction_id, paid_at")
+          .in("id", paymentIds);
         if (error) throw error;
         return json({ data });
       }
