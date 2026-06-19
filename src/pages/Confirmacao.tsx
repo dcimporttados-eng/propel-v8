@@ -20,6 +20,8 @@ const Confirmacao = () => {
     user_name: string;
     user_email: string;
     already_confirmed: boolean;
+    items?: Array<{ id: string; status: string; class_title: string; class_time: string; class_date: string | null }>;
+    combo?: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +59,8 @@ const Confirmacao = () => {
           user_name: data.user_first_name,
           user_email: data.user_email_masked,
           already_confirmed: data.status === "confirmed",
+          items: data.items,
+          combo: data.combo,
         };
         if (!cancelled) setReservation(next);
         return next;
@@ -92,6 +96,9 @@ const Confirmacao = () => {
         month: "long",
       })
     : null;
+
+  const formatItemDate = (d: string | null) =>
+    d ? new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }) : "";
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
