@@ -516,11 +516,11 @@ const AdminDashboard = () => {
       : "Todas as aulas";
     const statusLabel = filterStatus === "confirmed" ? "Pagas" : filterStatus === "pending" ? "Aguardando" : "Todas";
 
-    const confirmed = visibleReservations.filter((r) => r.status === "confirmed" || r.payment_status === "paid");
+    const confirmed = visibleReservations.filter((r) => r.status === "confirmed");
 
     const rows = visibleReservations.map((r, i) => {
-      const paid = r.status === "confirmed" || r.payment_status === "paid";
       const canceled = r.status === "canceled";
+      const paid = r.status === "confirmed";
       const status = canceled ? "Cancelada" : paid ? "Pago" : "Pendente";
       const classDate = r.class_date ? new Date(`${r.class_date}T12:00:00`).toLocaleDateString("pt-BR") : "-";
       return `
