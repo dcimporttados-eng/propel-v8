@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
         dbPaymentId = existingPayment.id;
         await supabase.from("payments").update({
           status: "paid",
+          amount,
           paid_at: new Date().toISOString(),
         }).eq("id", dbPaymentId);
       } else {

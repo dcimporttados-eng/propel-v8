@@ -20,6 +20,8 @@ const Confirmacao = () => {
     user_name: string;
     user_email: string;
     already_confirmed: boolean;
+    items?: Array<{ id: string; status: string; class_title: string; class_time: string; class_date: string | null }>;
+    combo?: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +59,8 @@ const Confirmacao = () => {
           user_name: data.user_first_name,
           user_email: data.user_email_masked,
           already_confirmed: data.status === "confirmed",
+          items: data.items,
+          combo: data.combo,
         };
         if (!cancelled) setReservation(next);
         return next;
@@ -93,6 +97,9 @@ const Confirmacao = () => {
       })
     : null;
 
+  const formatItemDate = (d: string | null) =>
+    d ? new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }) : "";
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -114,14 +121,29 @@ const Confirmacao = () => {
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
               <Check className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Reserva confirmada! ✅</h1>
-            <div className="space-y-1">
-              <p className="text-lg font-semibold text-foreground">{reservation.class_title}</p>
-              {formattedDate && <p className="text-muted-foreground capitalize">{formattedDate}</p>}
-              <p className="text-muted-foreground">Horário: {reservation.class_time}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {reservation.combo ? "Reservas confirmadas! ✅" : "Reserva confirmada! ✅"}
+            </h1>
+            {reservation.items && reservation.items.length > 1 ? (
+              <div className="space-y-2">
+                {reservation.items.map((it) => (
+                  <div key={it.id} className="bg-secondary rounded-xl p-3">
+                    <p className="font-semibold text-foreground">{it.class_title}</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {formatItemDate(it.class_date)} · {it.class_time}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-foreground">{reservation.class_title}</p>
+                {formattedDate && <p className="text-muted-foreground capitalize">{formattedDate}</p>}
+                <p className="text-muted-foreground">Horário: {reservation.class_time}</p>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
-              {reservation.user_name}, sua vaga está garantida. Nos vemos na aula! 💪
+              {reservation.user_name}, sua{reservation.combo ? "s vagas estão" : " vaga está"} garantida{reservation.combo ? "s" : ""}. Nos vemos na aula! 💪
             </p>
             <Button onClick={() => navigate("/")} variant="outline" className="rounded-full mt-4">
               <ArrowLeft className="w-4 h-4 mr-2" /> Voltar ao início
