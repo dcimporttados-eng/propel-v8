@@ -121,14 +121,29 @@ const Confirmacao = () => {
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto">
               <Check className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Reserva confirmada! ✅</h1>
-            <div className="space-y-1">
-              <p className="text-lg font-semibold text-foreground">{reservation.class_title}</p>
-              {formattedDate && <p className="text-muted-foreground capitalize">{formattedDate}</p>}
-              <p className="text-muted-foreground">Horário: {reservation.class_time}</p>
-            </div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {reservation.combo ? "Reservas confirmadas! ✅" : "Reserva confirmada! ✅"}
+            </h1>
+            {reservation.items && reservation.items.length > 1 ? (
+              <div className="space-y-2">
+                {reservation.items.map((it) => (
+                  <div key={it.id} className="bg-secondary rounded-xl p-3">
+                    <p className="font-semibold text-foreground">{it.class_title}</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {formatItemDate(it.class_date)} · {it.class_time}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-foreground">{reservation.class_title}</p>
+                {formattedDate && <p className="text-muted-foreground capitalize">{formattedDate}</p>}
+                <p className="text-muted-foreground">Horário: {reservation.class_time}</p>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">
-              {reservation.user_name}, sua vaga está garantida. Nos vemos na aula! 💪
+              {reservation.user_name}, sua{reservation.combo ? "s vagas estão" : " vaga está"} garantida{reservation.combo ? "s" : ""}. Nos vemos na aula! 💪
             </p>
             <Button onClick={() => navigate("/")} variant="outline" className="rounded-full mt-4">
               <ArrowLeft className="w-4 h-4 mr-2" /> Voltar ao início
