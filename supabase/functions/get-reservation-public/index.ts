@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 
     const { data: res } = await supabase
       .from("reservations")
-      .select("id, status, class_id, user_id, class_date")
+      .select("id, status, class_id, user_id, class_date, payment_id")
       .eq("id", reservationId)
       .maybeSingle();
 
@@ -47,10 +47,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [{ data: user }, { data: cls }] = await Promise.all([
+    // Combo: busca TODAS as reservas do mesmo pedido (mesmo payment_id) OU
+    // do mesmo usuário criadas no mesmo segundo (pending sem payment ainda).
+    let siblings: Array<{ id: string; status: string; class_id: string; class_date: string | null }> = [
+      { id: res.id, status: res.status, class_id: res.class_id, class_date: res.class_date },
+    ];
+    if (res.payment_id) {
+      const { data: sibs } = await supabase
+        .from("reservations")
+        .select("id, status, class_id, class_date")
+        .eq("payment_id", res.payment_id);
+      if (sibs && sibs.length > 0) siblings = sibs;
+    }
+
+    const classIds = [...new Set(siblings.map((s) => s.class_id))];
+    const [{ data: user }, { data: classesData }] = await Promise.all([
       supabase.from("users").select("name, email").eq("id", res.user_id).maybeSingle(),
-      supabase.from("classes").select("title, time, price").eq("id", res.class_id).maybeSingle(),
+      supabase.from("classes").select("id, title, time, price").in("id", classIds),
     ]);
+    const classesMap = new Map((classesData || []).map((c) => [c.id, c]));
+    const cls = classesMap.get(res.class_id);
+
+    const items = siblings
+      .map((s) => {
+        const c = classesMap.get(s.class_id);
+        return {
+          id: s.id,
+          status: s.status,
+          class_id: s.class_id,
+          class_date: s.class_date,
+          class_title: c?.title || "Aula",
+          class_time: (c?.time || "").slice(0, 5),
+          class_price: c?.price ?? 0,
+        };
+      })
+      .sort((a, b) => (a.class_date || "").localeCompare(b.class_date || ""));
 
     return new Response(JSON.stringify({
       id: res.id,
@@ -62,6 +93,8 @@ Deno.serve(async (req) => {
       class_price: cls?.price ?? 0,
       user_first_name: firstName(user?.name),
       user_email_masked: maskEmail(user?.email),
+      items,
+      combo: items.length > 1,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
