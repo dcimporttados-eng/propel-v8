@@ -252,14 +252,45 @@ const AdminDashboard = () => {
     }
 
     const userIds = [...new Set(resData.map((r) => r.user_id))];
-    const usersData = await fetchUsersByIds(userIds);
+    const reservationIds = resData.map((r) => r.id);
+    const paymentIds = [...new Set(resData.map((r) => r.payment_id).filter(Boolean) as string[])];
+
+    const [usersData, paymentsRes, paymentsByIdRes] = await Promise.all([
+      fetchUsersByIds(userIds),
+      adminCall<{ data: { reservation_id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
+        "list_payments_for_reservations",
+        { reservationIds },
+      ).catch(() => ({ data: [] })),
+      adminCall<{ data: { id: string; status: string; transaction_id: string | null; paid_at: string | null }[] }>(
+        "list_payments_by_ids",
+        { paymentIds },
+      ).catch(() => ({ data: [] })),
+    ]);
     const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
+
+    const payByRes = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
+    for (const p of (paymentsRes.data || [])) {
+      if (!payByRes.has(p.reservation_id)) payByRes.set(p.reservation_id, { status: p.status, transaction_id: p.transaction_id, paid_at: p.paid_at });
+    }
+    const payById = new Map<string, { status: string; transaction_id: string | null; paid_at: string | null }>();
+    for (const p of (paymentsByIdRes.data || [])) {
+      payById.set(p.id, { status: p.status, transaction_id: p.transaction_id, paid_at: p.paid_at });
+    }
 
     const map = new Map<string, Reservation[]>();
     for (const r of resData) {
       const user = usersMap.get(r.user_id);
       const key = `${r.class_id}_${r.class_date}`;
-      const enriched = { ...r, user_name: user?.name || "?", user_email: user?.email || "?", user_phone: user?.phone || "" };
+      const payment = payByRes.get(r.id) || (r.payment_id ? payById.get(r.payment_id) : undefined);
+      const enriched = {
+        ...r,
+        user_name: user?.name || "?",
+        user_email: user?.email || "?",
+        user_phone: user?.phone || "",
+        payment_status: payment?.status || null,
+        transaction_id: payment?.transaction_id || null,
+        paid_at: payment?.paid_at || null,
+      };
       map.set(key, [...(map.get(key) || []), enriched]);
     }
     setWeeklyReservations(map);
