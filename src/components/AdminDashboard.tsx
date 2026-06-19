@@ -33,6 +33,7 @@ interface Reservation {
   status: string;
   created_at: string;
   user_id: string;
+  payment_id?: string | null;
   user_name?: string;
   user_email?: string;
   user_phone?: string;
