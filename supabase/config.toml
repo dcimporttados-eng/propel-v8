@@ -3,9 +3,6 @@ project_id = "mlyostzsjvqlcczdunet"
 [functions.reserve]
 verify_jwt = false
 
-[functions.webhook-cakto]
-verify_jwt = false
-
 [functions.webhook-mercadopago]
 verify_jwt = false
 
