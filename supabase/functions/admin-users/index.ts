@@ -2,17 +2,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-hash",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
-const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const hash = req.headers.get("x-admin-hash") || "";
-    if (hash !== ADMIN_HASH) {
+    const adminPassword = req.headers.get("x-admin-password") || "";
+    const expected = Deno.env.get("ADMIN_PASSWORD") || "";
+    if (!expected || !safeEqual(adminPassword, expected)) {
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

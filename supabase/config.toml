@@ -12,8 +12,5 @@ verify_jwt = false
 [functions.expire-reservations]
 verify_jwt = false
 
-[functions.migrate-to-new]
-verify_jwt = false
-
 [functions.telegram-notify]
 verify_jwt = false

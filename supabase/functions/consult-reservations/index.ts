@@ -25,14 +25,25 @@ Deno.serve(async (req) => {
     const clean = identifier.trim();
     const digits = clean.replace(/\D/g, "");
 
-    // Busca match exato por email OU por telefone (com tratamento do prefixo 55)
+    // Match exato por email OU telefone (com tratamento do prefixo 55).
+    // Match exato evita enumeração por substring de telefone (vazava cross-user).
     let users: { id: string }[] = [];
     if (clean.includes("@")) {
-      const { data } = await supabase.from("users").select("id").ilike("email", clean).limit(5);
+      const { data } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", clean.toLowerCase())
+        .limit(5);
       users = data || [];
-    } else if (digits.length >= 8) {
-      const search = digits.startsWith("55") && digits.length > 10 ? digits.substring(2) : digits;
-      const { data } = await supabase.from("users").select("id").ilike("phone", `%${search}`).limit(5);
+    } else if (digits.length >= 10) {
+      // Normaliza removendo prefixo "55" se vier no formato internacional
+      const local = digits.startsWith("55") && digits.length > 10 ? digits.substring(2) : digits;
+      // Match exato em ambas as formas (com e sem 55) — sem ILIKE substring.
+      const { data } = await supabase
+        .from("users")
+        .select("id")
+        .in("phone", [local, `55${local}`])
+        .limit(5);
       users = data || [];
     }
 

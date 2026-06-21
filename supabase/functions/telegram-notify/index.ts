@@ -44,6 +44,16 @@ async function sendTelegram(text: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Internal-only endpoint: must be called with the shared internal secret.
+  const provided = req.headers.get("x-internal-secret") || "";
+  const expected = Deno.env.get("INTERNAL_FUNCTION_SECRET") || "";
+  if (!expected || provided !== expected) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
