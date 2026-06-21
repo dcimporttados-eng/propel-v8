@@ -11,6 +11,17 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Require shared internal secret — prevents anyone on the internet from
+  // triggering reservation cancellations (DoS / business logic abuse).
+  const provided = req.headers.get("x-internal-secret") || "";
+  const expected = Deno.env.get("INTERNAL_FUNCTION_SECRET") || "";
+  if (!expected || provided !== expected) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

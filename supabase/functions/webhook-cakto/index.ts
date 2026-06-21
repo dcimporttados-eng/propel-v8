@@ -411,6 +411,25 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ===== Signature/secret verification =====
+    // Cakto deve ser configurada para enviar o secret compartilhado no header
+    // `x-cakto-token` (ou query string `?token=...`). Sem ele a request é rejeitada
+    // para impedir fraude (reservas "pagas" sem cobrança real).
+    const expectedToken = Deno.env.get("CAKTO_WEBHOOK_SECRET") || "";
+    const url = new URL(req.url);
+    const providedToken =
+      req.headers.get("x-cakto-token") ||
+      req.headers.get("x-webhook-token") ||
+      url.searchParams.get("token") ||
+      "";
+    if (!expectedToken || providedToken !== expectedToken) {
+      console.warn("Cakto webhook: missing or invalid signature token");
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const contentType = req.headers.get("content-type") ?? "";
     const rawBody = await req.text();
     const body = parseWebhookBody(rawBody, contentType);

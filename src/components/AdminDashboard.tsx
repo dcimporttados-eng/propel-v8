@@ -71,20 +71,16 @@ const AdminDashboard = () => {
   const [savingManual, setSavingManual] = useState(false);
   const [manualForm, setManualForm] = useState({ name: "", email: "", phone: "", classId: "", classDate: "", transactionCode: "" });
 
-  const ADMIN_HASH = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
-
-  const hashPassword = async (pwd: string) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(pwd);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  };
+  // Password is held only in memory after login and sent as a header on each
+  // admin call. The backend (edge function) validates it against the
+  // ADMIN_PASSWORD secret — there's no longer any hash in the bundle.
+  const [adminPwd, setAdminPwd] = useState<string>("");
 
   const fetchUsersByIds = async (ids: string[]) => {
     if (ids.length === 0) return [] as { id: string; name: string; email: string; phone: string | null }[];
     const { data } = await supabase.functions.invoke("admin-users", {
       body: { ids },
-      headers: { "x-admin-hash": ADMIN_HASH },
+      headers: { "x-admin-password": adminPwd },
     });
     return (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
   };
@@ -92,7 +88,7 @@ const AdminDashboard = () => {
   const fetchUserByEmail = async (email: string) => {
     const { data } = await supabase.functions.invoke("admin-users", {
       body: { email },
-      headers: { "x-admin-hash": ADMIN_HASH },
+      headers: { "x-admin-password": adminPwd },
     });
     const users = (data?.users || []) as { id: string; name: string; email: string; phone: string | null }[];
     return users[0] || null;
@@ -101,7 +97,7 @@ const AdminDashboard = () => {
   const adminCall = async <T = unknown>(action: string, payload: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("admin", {
       body: { action, payload },
-      headers: { "x-admin-hash": ADMIN_HASH },
+      headers: { "x-admin-password": adminPwd },
     });
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
@@ -110,12 +106,23 @@ const AdminDashboard = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hashed = await hashPassword(password);
-    if (hashed === ADMIN_HASH) {
+    if (!password) return;
+    // Verify password by issuing a no-op admin call. The edge function returns
+    // 401 (which surfaces as a function error) when the password is wrong.
+    try {
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: { action: "list_reservations", payload: { status: "confirmed", limit: 1 } },
+        headers: { "x-admin-password": password },
+      });
+      if (error || data?.error) {
+        toast.error("Senha incorreta");
+        return;
+      }
+      setAdminPwd(password);
       setAuthenticated(true);
       setPassword("");
       fetchData();
-    } else {
+    } catch {
       toast.error("Senha incorreta");
     }
   };
@@ -491,6 +498,7 @@ const AdminDashboard = () => {
     setOpen(false);
     setAuthenticated(false);
     setPassword("");
+    setAdminPwd("");
     setSearchTerm("");
   };
 
