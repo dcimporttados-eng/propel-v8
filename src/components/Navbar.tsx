@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import AdminDashboard from "./AdminDashboard";
 
 interface NavbarProps {
   onScheduleClick: () => void;
@@ -46,6 +47,7 @@ const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
               {l.label}
             </button>
           ))}
+          <AdminDashboard />
           <Button
             onClick={onScheduleClick}
             className="bg-gradient-primary text-primary-foreground font-semibold rounded-full px-6 hover:scale-105 transition-transform"
@@ -99,6 +101,9 @@ const Navbar = ({ onScheduleClick, onConsultClick }: NavbarProps) => {
                  >
                    Minhas Reservas
                  </Button>
+                <div className="flex justify-center pt-1">
+                  <AdminDashboard />
+                </div>
               </div>
             </div>
           </motion.div>
