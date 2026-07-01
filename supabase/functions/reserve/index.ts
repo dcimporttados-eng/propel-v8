@@ -6,9 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Promo "Combo 2 aulas por R$39,90" — estendida até 31/08/2026
+// Promo "Combo 2 aulas por R$39,90" — válida até 01/07/2026
 const PROMO_START = "2026-04-29";
-const PROMO_END = "2026-08-31";
+const PROMO_END = "2026-07-01";
 const COMBO_PRICE_CENTS = 3990; // R$39,90 total para 2 aulas
 const REGULAR_PRICE_CENTS = 2990; // R$29,90 por aula
 
