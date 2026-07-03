@@ -255,13 +255,24 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           ))}
         </div>
 
-        {/* Banner promo (sempre visível durante a promo) */}
-        {promoActive && step === 1 && (
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-gradient-primary/10 border border-primary/30">
+        {/* Banner promo combos (5+1 / 10+2) */}
+        {step === 1 && (
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/10 border border-primary/30">
             <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-xs">
-              <p className="font-bold text-primary">Promo: 2 aulas por R$39,90</p>
-              <p className="text-muted-foreground">Selecione 2 horários e o desconto é aplicado automaticamente.</p>
+            <div className="text-xs space-y-1">
+              <p className="font-bold text-primary">Combos: 5 aulas → ganhe 1 · 10 aulas → ganhe 2</p>
+              <p className="text-muted-foreground">
+                Reserve e pague 5 ou 10 aulas de uma vez. Após o pagamento, envie o comprovante no WhatsApp{" "}
+                <a
+                  href="https://wa.me/5551980467233"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-foreground underline"
+                >
+                  (51) 98046-7233
+                </a>{" "}
+                para agendar sua(s) aula(s) bônus.
+              </p>
             </div>
           </div>
         )}

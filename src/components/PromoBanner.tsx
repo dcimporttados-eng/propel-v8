@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { X, Flame, Heart, ShieldCheck, Snowflake } from "lucide-react";
+import { X } from "lucide-react";
+import promoImage from "@/assets/promo-combos.png.asset.json";
 
 interface PromoBannerProps {
   onScheduleClick: () => void;
@@ -43,7 +44,7 @@ const PromoBanner = ({ onScheduleClick }: PromoBannerProps) => {
       onClick={() => setOpen(false)}
     >
       <div
-        className="relative w-full max-w-md rounded-2xl border-2 border-primary bg-gradient-to-br from-background via-background to-primary/10 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden"
+        className="relative w-full max-w-lg rounded-2xl border-2 border-primary bg-background shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Progress bar */}
@@ -56,64 +57,30 @@ const PromoBanner = ({ onScheduleClick }: PromoBannerProps) => {
 
         <button
           onClick={() => setOpen(false)}
-          className="absolute top-3 right-3 z-10 rounded-full bg-background/80 p-1.5 text-foreground hover:bg-background"
+          className="absolute top-3 right-3 z-10 rounded-full bg-background/90 p-1.5 text-foreground hover:bg-background"
           aria-label="Fechar"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <div className="p-6 pt-8 space-y-5">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <Snowflake className="h-5 w-5" />
-              <span className="text-xs font-bold tracking-widest uppercase">
-                Promoção de Inverno
-              </span>
-              <Snowflake className="h-5 w-5" />
-            </div>
-            <h2 className="text-3xl font-black leading-tight text-foreground">
-              PARA NÃO PERDER O{" "}
-              <span className="text-primary">PIQUE NO FRIO</span>
-            </h2>
-          </div>
+        <img
+          src={promoImage.url}
+          alt="Promoção: 5 aulas ganhe 1, 10 aulas ganhe 2"
+          className="w-full h-auto block"
+        />
 
-          {/* Price */}
-          <div className="rounded-xl border-2 border-primary bg-primary/10 p-4 text-center">
-            <p className="text-sm font-bold text-foreground">
-              2 AULAS DE SPINNING POR
-            </p>
-            <p className="text-5xl font-black text-primary mt-1">
-              R$ 39<span className="text-3xl">,90</span>
-            </p>
-          </div>
-
-          {/* Benefits */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 text-sm">
-              <Flame className="h-5 w-5 text-primary shrink-0" />
-              <span className="font-semibold text-foreground">Acelere seus resultados</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Heart className="h-5 w-5 text-primary shrink-0" />
-              <span className="font-semibold text-foreground">Mais energia e disposição</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
-              <span className="font-semibold text-foreground">Fortaleça sua saúde e imunidade</span>
-            </div>
-          </div>
-
-          {/* CTA */}
+        <div className="p-5 space-y-3 border-t border-border">
+          <p className="text-center text-xs text-muted-foreground leading-relaxed">
+            Reserve <span className="font-bold text-foreground">5 aulas</span> e ganhe <span className="font-bold text-primary">1 grátis</span> · Reserve <span className="font-bold text-foreground">10 aulas</span> e ganhe <span className="font-bold text-primary">2 grátis</span>.
+            <br />
+            Após o pagamento, envie o comprovante no WhatsApp <span className="font-bold text-foreground">(51) 98046-7233</span> para agendar sua(s) aula(s) bônus.
+          </p>
           <button
             onClick={handleReserve}
-            className="w-full rounded-xl bg-primary py-4 text-base font-black uppercase tracking-wide text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
+            className="w-full rounded-xl bg-primary py-3 text-base font-black uppercase tracking-wide text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
           >
-            Reservar minha vaga
+            Garantir meu combo
           </button>
-          <p className="text-center text-xs text-muted-foreground">
-            Disciplina hoje, resultados sempre!
-          </p>
         </div>
       </div>
     </div>
