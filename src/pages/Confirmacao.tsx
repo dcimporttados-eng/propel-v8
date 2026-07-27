@@ -75,7 +75,7 @@ const Confirmacao = () => {
     (async () => {
       const initial = await fetchReservation(false);
       if (!initial || initial.status === "confirmed") return;
-      // Poll enquanto pendente — aguarda webhook do Mercado Pago
+      // Poll enquanto pendente — aguarda webhook do Asaas
       while (!cancelled && attempts < maxAttempts) {
         attempts++;
         await new Promise((r) => setTimeout(r, 2000));
@@ -162,7 +162,7 @@ const Confirmacao = () => {
               <p className="text-sm text-muted-foreground mt-2">{reservation?.user_name} · {reservation?.user_email}</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Assim que o Mercado Pago confirmar seu pagamento, sua reserva aparecerá aqui automaticamente. Se você ainda não pagou, retorne ao checkout. Caso já tenha pago, aguarde alguns instantes.
+              Assim que o pagamento for confirmado, sua reserva aparecerá aqui automaticamente. Se você ainda não pagou, retorne ao checkout. Caso já tenha pago, aguarde alguns instantes.
             </p>
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" /> Verificando pagamento...

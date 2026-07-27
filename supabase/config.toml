@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.webhook-mercadopago]
 verify_jwt = false
 
+[functions.webhook-asaas]
+verify_jwt = false
+
 [functions.expire-reservations]
 verify_jwt = false
 

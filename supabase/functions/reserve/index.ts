@@ -30,7 +30,13 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const mpAccessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN")!;
+    const asaasApiKey = Deno.env.get("ASAAS_API_KEY")!;
+    // ASAAS_FEE_WALLET_ID não é mais usado em split explícito: a API key é da própria
+    // agência, então o que não for enviado à cliente via split já fica automaticamente
+    // na conta da agência — não há necessidade de um split "de volta para si mesmo".
+    const asaasClientWalletId = Deno.env.get("ASAAS_CLIENT_WALLET_ID")!; // recebe a maior parte via split
+    const asaasEnv = Deno.env.get("ASAAS_ENV") || "sandbox"; // "sandbox" ou "production"
+    const asaasBaseUrl = asaasEnv === "production" ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload = await req.json();
@@ -168,9 +174,8 @@ Deno.serve(async (req) => {
     // external_reference no formato CSV — webhook itera sobre todos
     const externalReference = reservationIds.join(",");
 
-    // Create Mercado Pago Checkout Pro preference
+    // Create Asaas Checkout (com split de R$1,00 fixo para a conta do Pavilhão 8)
     const totalDecimal = totalCents / 100;
-    const webhookUrl = `${supabaseUrl}/functions/v1/webhook-mercadopago`;
 
     const isCombo = promoActive && enriched.length >= 2;
     const itemsTitle = isCombo
@@ -179,56 +184,63 @@ Deno.serve(async (req) => {
         ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
         : `${enriched.length} aulas — Pavilhão 8`;
 
-    const preference = {
+    // Asaas desconta a própria taxa (cartão/Pix) ANTES de aplicar os splits, e o valor
+    // final da taxa só é conhecido depois que o cliente escolhe o método de pagamento.
+    // Reserva-se uma margem de segurança (cobrindo o pior caso — taxa de cartão) para o
+    // split não ultrapassar o valor líquido a receber. A conta dona da API key (agência)
+    // fica automaticamente com o que sobrar do split da cliente, ou seja, o mínimo garantido
+    // pra agência é R$1,00, podendo ser um pouco mais dependendo da taxa real cobrada.
+    const feeBuffer = Math.max(1.2, totalDecimal * 0.05);
+    const clientSplitValue = Math.max(0, Math.round((totalDecimal - 1.0 - feeBuffer) * 100) / 100);
+    const splits = clientSplitValue > 0
+      ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitValue }]
+      : [];
+
+    const checkoutPayload = {
+      billingTypes: ["PIX", "CREDIT_CARD"],
+      chargeTypes: ["DETACHED"],
+      minutesToExpire: 30,
+      callback: {
+        successUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=approved`,
+        cancelUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=failed`,
+        expiredUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=pending`,
+      },
       items: [
         {
-          title: itemsTitle,
+          name: itemsTitle,
+          description: `Reserva Pavilhão 8 — ${normalizedName}`,
           quantity: 1,
-          unit_price: totalDecimal,
-          currency_id: "BRL",
+          value: totalDecimal,
         },
       ],
-      payer: {
-        email: normalizedEmail,
-        name: normalizedName,
-      },
-      external_reference: externalReference,
-      notification_url: webhookUrl,
-      back_urls: {
-        success: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=approved`,
-        failure: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=failed`,
-        pending: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=pending`,
-      },
-      auto_return: "approved",
-      statement_descriptor: "PAVILHAO8",
-      expires: true,
-      expiration_date_from: new Date().toISOString(),
-      expiration_date_to: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min
+      splits,
+      externalReference,
     };
 
-    const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
+    const asaasResponse = await fetch(`${asaasBaseUrl}/checkouts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${mpAccessToken}`,
+        access_token: asaasApiKey,
       },
-      body: JSON.stringify(preference),
+      body: JSON.stringify(checkoutPayload),
     });
 
-    if (!mpResponse.ok) {
-      const errBody = await mpResponse.text();
-      console.error(`MP preference error ${mpResponse.status}: ${errBody}`);
+    if (!asaasResponse.ok) {
+      const errBody = await asaasResponse.text();
+      console.error(`Asaas checkout error ${asaasResponse.status}: ${errBody}`);
       throw new Error("Erro ao gerar link de pagamento");
     }
 
-    const mpData = await mpResponse.json();
-    console.log("MP preference created:", mpData.id, "init_point:", mpData.init_point);
+    const asaasData = await asaasResponse.json();
+    const checkoutUrl = asaasData.link || asaasData.url || asaasData.checkoutUrl;
+    console.log("Asaas checkout created:", asaasData.id, "url:", checkoutUrl);
 
     return new Response(
       JSON.stringify({
         reservation_id: reservationIds[0],
         reservation_ids: reservationIds,
-        checkout_url: mpData.init_point,
+        checkout_url: checkoutUrl,
         class_title: itemsTitle,
         total_cents: totalCents,
         combo_applied: isCombo,
