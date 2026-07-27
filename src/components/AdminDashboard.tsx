@@ -133,7 +133,7 @@ const AdminDashboard = () => {
       supabase.from("classes").select("*").order("time", { ascending: true }),
       supabase.from("class_suspensions").select("*").order("suspended_date", { ascending: true }),
     ]);
-    if (templatesRes.data) setTemplates(templatesRes.data as ClassTemplate[]);
+    if (templatesRes.data) setTemplates((templatesRes.data as ClassTemplate[]).filter((t) => t.capacity > 0));
     if (suspensionsRes.data) setSuspensions(suspensionsRes.data as Suspension[]);
     setLoading(false);
   };
