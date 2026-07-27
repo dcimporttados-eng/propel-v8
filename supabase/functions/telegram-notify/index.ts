@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       (user?.email ? `✉️ ${escapeHtml(user.email)}\n` : "") +
       (valorLinha ? `${valorLinha}\n` : "") +
       `${linhasAulas}` +
-      (transactionId ? `\n🆔 MP: ${escapeHtml(transactionId)}` : "");
+      (transactionId ? `\n🆔 Asaas: ${escapeHtml(transactionId)}` : "");
 
     const result = await sendTelegram(text);
     return new Response(JSON.stringify(result), {
