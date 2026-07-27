@@ -201,9 +201,9 @@ Deno.serve(async (req) => {
       chargeTypes: ["DETACHED"],
       minutesToExpire: 30,
       callback: {
-        successUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=approved`,
-        cancelUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=failed`,
-        expiredUrl: `https://propel-v8.lovable.app/confirmacao?src=${reservationIds[0]}&status=pending`,
+        successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
+        cancelUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=failed`,
+        expiredUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=pending`,
       },
       items: [
         {
