@@ -236,6 +236,12 @@ Deno.serve(async (req) => {
     const checkoutUrl = asaasData.link || asaasData.url || asaasData.checkoutUrl;
     console.log("Asaas checkout created:", asaasData.id, "url:", checkoutUrl);
 
+    // A Asaas não propaga o externalReference da CheckoutSession pro Payment gerado
+    // ao concluir o pagamento — guardamos o ID da sessão como plano B para o webhook.
+    if (asaasData.id) {
+      await supabase.from("reservations").update({ asaas_checkout_id: asaasData.id }).in("id", reservationIds);
+    }
+
     return new Response(
       JSON.stringify({
         reservation_id: reservationIds[0],

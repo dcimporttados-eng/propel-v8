@@ -43,32 +43,41 @@ Deno.serve(async (req) => {
     }
 
     const externalRef = payment.externalReference as string | null;
+    const checkoutSessionId = payment.checkoutSession as string | null;
     const amount = Math.round((payment.value || 0) * 100); // Asaas usa decimal, converte para centavos
     const transactionId = String(payment.id);
 
-    if (!externalRef) {
-      console.error("No externalReference (reservation_id) in Asaas payment");
-      return new Response(JSON.stringify({ received: true, warning: "no_reservation_ref" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // externalReference pode ser CSV (combo/múltiplas reservas) ou ID único.
+    // A Asaas nem sempre propaga o externalReference da CheckoutSession pro Payment —
+    // nesse caso, cai pro plano B: casar pelo checkoutSession que salvamos na reserva.
+    let reservations: { id: string; class_id: string; user_id: string; status: string }[] | null = null;
+
+    if (externalRef) {
+      const reservationIds = externalRef.split(",").map((s) => s.trim()).filter(Boolean);
+      const { data } = await supabase
+        .from("reservations")
+        .select("id, class_id, user_id, status")
+        .in("id", reservationIds);
+      if (data && data.length > 0) reservations = data;
     }
 
-    // externalReference pode ser CSV (combo/múltiplas reservas) ou ID único
-    const reservationIds = externalRef.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!reservations && checkoutSessionId) {
+      const { data } = await supabase
+        .from("reservations")
+        .select("id, class_id, user_id, status")
+        .eq("asaas_checkout_id", checkoutSessionId);
+      if (data && data.length > 0) reservations = data;
+    }
 
-    const { data: reservations, error: resError } = await supabase
-      .from("reservations")
-      .select("id, class_id, user_id, status")
-      .in("id", reservationIds);
-
-    if (resError || !reservations || reservations.length === 0) {
-      console.error(`Reservations [${externalRef}] not found: ${resError?.message}`);
+    if (!reservations || reservations.length === 0) {
+      console.error(`No reservations found for externalRef=${externalRef} checkoutSession=${checkoutSessionId}`);
       return new Response(JSON.stringify({ received: true, warning: "reservation_not_found" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const reservationIds = reservations.map((r) => r.id);
 
     if (CONFIRM_EVENTS.has(event)) {
       const firstReservation = reservations[0];
