@@ -184,6 +184,17 @@ Deno.serve(async (req) => {
         ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
         : `${enriched.length} aulas — Pavilhão 8`;
 
+    // Data(s)/horário(s) da(s) aula(s) reservada(s), pra aparecer na descrição da cobrança na Asaas
+    const scheduleDesc = enriched
+      .map((e) => {
+        const [y, m, d] = (e.item.class_date || "").split("-");
+        const dateBr = y && m && d ? `${d}/${m}` : "";
+        const time = (e.classData.time || "").slice(0, 5);
+        return `${dateBr} ${time}`.trim();
+      })
+      .filter(Boolean)
+      .join(", ");
+
     // Asaas desconta a própria taxa (cartão/Pix) ANTES de aplicar os splits, e o valor
     // final da taxa só é conhecido depois que o cliente escolhe o método de pagamento.
     // Reserva-se uma margem de segurança (cobrindo o pior caso — taxa de cartão) para o
@@ -208,7 +219,7 @@ Deno.serve(async (req) => {
       items: [
         {
           name: itemsTitle,
-          description: `Reserva Pavilhão 8 — ${normalizedName}`,
+          description: `Reserva Pavilhão 8 — ${normalizedName}${scheduleDesc ? ` — ${scheduleDesc}` : ""}`,
           quantity: 1,
           value: totalDecimal,
         },
