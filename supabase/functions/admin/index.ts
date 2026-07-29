@@ -60,7 +60,15 @@ Deno.serve(async (req) => {
       }
       case "delete_class": {
         const { error } = await supabase.from("classes").delete().eq("id", (payload as { id: string }).id);
-        if (error) throw error;
+        if (error) {
+          if (error.code === "23503") {
+            return json({
+              error:
+                "Esse horário tem reservas vinculadas (algumas em combo com reservas de outras aulas) e não pode ser excluído sem apagar histórico de outras pessoas. Em vez de excluir, defina Vagas = 0 para desativar sem perder o histórico.",
+            });
+          }
+          throw error;
+        }
         return json({ ok: true });
       }
 
