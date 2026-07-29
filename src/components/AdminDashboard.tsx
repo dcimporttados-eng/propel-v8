@@ -57,7 +57,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [loadingReservations, setLoadingReservations] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
+  const [newTemplate, setNewTemplate] = useState({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "" });
   const [adding, setAdding] = useState(false);
   const [activeTab, setActiveTab] = useState<"templates" | "suspensions" | "reservations" | "weekly">("templates");
   const [weekOffset, setWeekOffset] = useState(0);
@@ -365,12 +365,12 @@ const AdminDashboard = () => {
         price: newTemplate.price,
         day_of_week: newTemplate.day_of_week === 0 ? null : newTemplate.day_of_week,
         instructor: newTemplate.instructor || null,
-        checkout_url: newTemplate.checkout_url || null,
+        checkout_url: null,
         date: null,
       });
       if (res?.data) {
         setTemplates((prev) => [...prev, res.data]);
-        setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "", checkout_url: "https://pay.cakto.com.br/nkizirf_810528" });
+        setNewTemplate({ title: "Sprint Bike", time: "", capacity: 10, price: 2990, day_of_week: 0, instructor: "" });
         toast.success("Horário criado!");
       }
     } catch (e) {
@@ -742,10 +742,6 @@ const AdminDashboard = () => {
                                       <Input type="number" min={0} value={t.price} onChange={(e) => updateTemplate(t.id, "price", parseInt(e.target.value) || 0)} className="bg-background border-border mt-1 h-9 text-sm" />
                                     </div>
                                   </div>
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
-                                    <Input value={t.checkout_url || ""} onChange={(e) => updateTemplate(t.id, "checkout_url", e.target.value)} placeholder="https://pay.cakto.com.br/..." className="bg-background border-border mt-1 h-9 text-sm" />
-                                  </div>
                                   <div className="flex gap-2 justify-end">
                                     <Button
                                       size="sm"
@@ -814,10 +810,6 @@ const AdminDashboard = () => {
                           <Label className="text-xs text-muted-foreground">Preço (centavos)</Label>
                           <Input type="number" min={0} value={newTemplate.price} onChange={(e) => setNewTemplate({ ...newTemplate, price: parseInt(e.target.value) || 0 })} className="bg-secondary border-border mt-1 h-9 text-sm" />
                         </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
-                        <Input value={newTemplate.checkout_url} onChange={(e) => setNewTemplate({ ...newTemplate, checkout_url: e.target.value })} placeholder="https://pay.cakto.com.br/..." className="bg-secondary border-border mt-1 h-9 text-sm" />
                       </div>
                       <Button type="submit" disabled={adding} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full h-10">
                         {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Adicionar Horário"}
