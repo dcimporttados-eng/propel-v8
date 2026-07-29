@@ -49,6 +49,9 @@ const AdminDashboard = () => {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [templates, setTemplates] = useState<ClassTemplate[]>([]);
+  const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
+  const [classSearch, setClassSearch] = useState("");
+  const [classDayFilter, setClassDayFilter] = useState<number>(-1); // -1 = todos os dias
   const [suspensions, setSuspensions] = useState<Suspension[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -337,10 +340,10 @@ const AdminDashboard = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Excluir este horário?")) return;
     try {
       await adminCall("delete_class", { id });
       setTemplates((prev) => prev.filter((t) => t.id !== id));
+      setExpandedClassId((cur) => (cur === id ? null : cur));
       toast.success("Excluído!");
     } catch (e) {
       toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
@@ -623,61 +626,151 @@ const AdminDashboard = () => {
                 <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">Configure os horários semanais. "Todos os dias" = Seg-Sáb. Ou escolha um dia específico.</p>
 
-                  {templates.map((t) => (
-                    <div key={t.id} className="p-4 bg-secondary rounded-xl border border-border space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Título</Label>
-                          <Input value={t.title} onChange={(e) => updateTemplate(t.id, "title", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Dia da semana</Label>
-                          <select
-                            value={t.day_of_week ?? 0}
-                            onChange={(e) => updateTemplate(t.id, "day_of_week", parseInt(e.target.value) || null)}
-                            className="w-full h-9 mt-1 rounded-md border border-border bg-background px-3 text-sm"
-                          >
-                            <option value={0}>Todos (Seg-Sáb)</option>
-                            {[1, 2, 3, 4, 5, 6].map((d) => (
-                              <option key={d} value={d}>{DAY_NAMES[d]}</option>
-                            ))}
-                          </select>
-                        </div>
+                  {/* Busca e filtro por dia */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      value={classSearch}
+                      onChange={(e) => setClassSearch(e.target.value)}
+                      placeholder="Buscar por professora ou título..."
+                      className="bg-secondary border-border h-9 text-sm"
+                    />
+                    <select
+                      value={classDayFilter}
+                      onChange={(e) => setClassDayFilter(parseInt(e.target.value))}
+                      className="w-full h-9 rounded-md border border-border bg-secondary px-3 text-sm"
+                    >
+                      <option value={-1}>Todos os dias</option>
+                      <option value={0}>Todos (Seg-Sáb)</option>
+                      {[1, 2, 3, 4, 5, 6].map((d) => (
+                        <option key={d} value={d}>{DAY_NAMES[d]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {(() => {
+                    const term = classSearch.trim().toLowerCase();
+                    const filtered = templates.filter((t) => {
+                      if (classDayFilter !== -1 && (t.day_of_week ?? 0) !== classDayFilter) return false;
+                      if (!term) return true;
+                      return (
+                        (t.instructor || "").toLowerCase().includes(term) ||
+                        (t.title || "").toLowerCase().includes(term)
+                      );
+                    });
+                    const sorted = [...filtered].sort((a, b) => {
+                      const dowA = a.day_of_week ?? 0;
+                      const dowB = b.day_of_week ?? 0;
+                      if (dowA !== dowB) return dowA - dowB;
+                      return (a.time || "").localeCompare(b.time || "");
+                    });
+
+                    if (sorted.length === 0) {
+                      return <p className="text-sm text-muted-foreground py-6 text-center">Nenhum horário encontrado com esses filtros.</p>;
+                    }
+
+                    const groups: { day: number; items: ClassTemplate[] }[] = [];
+                    for (const t of sorted) {
+                      const dow = t.day_of_week ?? 0;
+                      let g = groups.find((g) => g.day === dow);
+                      if (!g) { g = { day: dow, items: [] }; groups.push(g); }
+                      g.items.push(t);
+                    }
+
+                    return groups.map((g) => (
+                      <div key={g.day} className="space-y-2">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">
+                          {g.day === 0 ? "Todos os dias (Seg-Sáb)" : DAY_NAMES[g.day]}
+                        </h4>
+                        {g.items.map((t) => {
+                          const expanded = expandedClassId === t.id;
+                          return (
+                            <div key={t.id} className="bg-secondary rounded-xl border border-border overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedClassId(expanded ? null : t.id)}
+                                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/70 transition-colors"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <span className="text-sm font-semibold tabular-nums shrink-0">{t.time?.slice(0, 5)}</span>
+                                  <span className="text-sm text-foreground truncate">{t.title}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0">{t.instructor || "sem professora"}</span>
+                                  {t.capacity === 0 && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/20 text-destructive shrink-0">Desativado</span>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground shrink-0 ml-2">{expanded ? "Fechar ▲" : "Editar ▼"}</span>
+                              </button>
+
+                              {expanded && (
+                                <div className="p-4 pt-0 space-y-3 border-t border-border">
+                                  <div className="grid grid-cols-2 gap-3 pt-3">
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Título</Label>
+                                      <Input value={t.title} onChange={(e) => updateTemplate(t.id, "title", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Dia da semana</Label>
+                                      <select
+                                        value={t.day_of_week ?? 0}
+                                        onChange={(e) => updateTemplate(t.id, "day_of_week", parseInt(e.target.value) || null)}
+                                        className="w-full h-9 mt-1 rounded-md border border-border bg-background px-3 text-sm"
+                                      >
+                                        <option value={0}>Todos (Seg-Sáb)</option>
+                                        {[1, 2, 3, 4, 5, 6].map((d) => (
+                                          <option key={d} value={d}>{DAY_NAMES[d]}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Horário</Label>
+                                      <Input type="time" value={t.time?.slice(0, 5)} onChange={(e) => updateTemplate(t.id, "time", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Professora</Label>
+                                      <Input value={t.instructor || ""} onChange={(e) => updateTemplate(t.id, "instructor", e.target.value)} placeholder="Nome da professora" className="bg-background border-border mt-1 h-9 text-sm" />
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Vagas</Label>
+                                      <Input type="number" min={0} value={t.capacity} onChange={(e) => updateTemplate(t.id, "capacity", parseInt(e.target.value) || 0)} className="bg-background border-border mt-1 h-9 text-sm" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Preço (centavos)</Label>
+                                      <Input type="number" min={0} value={t.price} onChange={(e) => updateTemplate(t.id, "price", parseInt(e.target.value) || 0)} className="bg-background border-border mt-1 h-9 text-sm" />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
+                                    <Input value={t.checkout_url || ""} onChange={(e) => updateTemplate(t.id, "checkout_url", e.target.value)} placeholder="https://pay.cakto.com.br/..." className="bg-background border-border mt-1 h-9 text-sm" />
+                                  </div>
+                                  <div className="flex gap-2 justify-end">
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => {
+                                        const label = `${DAY_NAMES[t.day_of_week || 0] || "Todos os dias"} ${t.time?.slice(0, 5)} — ${t.instructor || t.title}`;
+                                        if (!confirm(`Excluir "${label}"? Essa ação não pode ser desfeita.`)) return;
+                                        handleDelete(t.id);
+                                      }}
+                                      className="h-8 px-3 text-xs"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir
+                                    </Button>
+                                    <Button size="sm" onClick={() => handleSave(t)} disabled={saving === t.id} className="h-8 px-3 text-xs bg-primary text-primary-foreground">
+                                      {saving === t.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5 mr-1" /> Salvar</>}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Horário</Label>
-                          <Input type="time" value={t.time?.slice(0, 5)} onChange={(e) => updateTemplate(t.id, "time", e.target.value)} className="bg-background border-border mt-1 h-9 text-sm" />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Professora</Label>
-                          <Input value={t.instructor || ""} onChange={(e) => updateTemplate(t.id, "instructor", e.target.value)} placeholder="Nome da professora" className="bg-background border-border mt-1 h-9 text-sm" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Vagas</Label>
-                          <Input type="number" min={1} value={t.capacity} onChange={(e) => updateTemplate(t.id, "capacity", parseInt(e.target.value) || 1)} className="bg-background border-border mt-1 h-9 text-sm" />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Preço (centavos)</Label>
-                          <Input type="number" min={0} value={t.price} onChange={(e) => updateTemplate(t.id, "price", parseInt(e.target.value) || 0)} className="bg-background border-border mt-1 h-9 text-sm" />
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">URL de Checkout (Cakto)</Label>
-                        <Input value={t.checkout_url || ""} onChange={(e) => updateTemplate(t.id, "checkout_url", e.target.value)} placeholder="https://pay.cakto.com.br/..." className="bg-background border-border mt-1 h-9 text-sm" />
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(t.id)} className="h-8 px-3 text-xs">
-                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir
-                        </Button>
-                        <Button size="sm" onClick={() => handleSave(t)} disabled={saving === t.id} className="h-8 px-3 text-xs bg-primary text-primary-foreground">
-                          {saving === t.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5 mr-1" /> Salvar</>}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ));
+                  })()}
 
                   {/* Add new */}
                   <div className="border-t border-border pt-4">
