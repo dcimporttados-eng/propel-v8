@@ -59,14 +59,21 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
       case "delete_class": {
-        const { error } = await supabase.from("classes").delete().eq("id", (payload as { id: string }).id);
+        const classId = (payload as { id: string }).id;
+        const CANNOT_DELETE_MSG =
+          "Esse horário tem reservas vinculadas e não pode ser excluído sem apagar histórico (inclusive de reservas em combo com outras aulas). Em vez de excluir, defina Vagas = 0 para desativar sem perder o histórico.";
+
+        const { count } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("class_id", classId);
+        if (count && count > 0) {
+          return json({ error: CANNOT_DELETE_MSG });
+        }
+
+        const { error } = await supabase.from("classes").delete().eq("id", classId);
         if (error) {
-          if (error.code === "23503") {
-            return json({
-              error:
-                "Esse horário tem reservas vinculadas (algumas em combo com reservas de outras aulas) e não pode ser excluído sem apagar histórico de outras pessoas. Em vez de excluir, defina Vagas = 0 para desativar sem perder o histórico.",
-            });
-          }
+          if (error.code === "23503") return json({ error: CANNOT_DELETE_MSG });
           throw error;
         }
         return json({ ok: true });
