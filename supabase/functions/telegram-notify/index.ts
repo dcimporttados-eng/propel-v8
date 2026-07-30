@@ -196,6 +196,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== Notificação de transferência de reserva =====
+    if (type === "transfer") {
+      const text =
+        `🔄 <b>Reserva Transferida</b>\n` +
+        `👤 ${escapeHtml(payload.user_name || "")}\n` +
+        (payload.user_phone ? `📱 ${escapeHtml(payload.user_phone)}\n` : "") +
+        (payload.user_email ? `✉️ ${escapeHtml(payload.user_email)}\n` : "") +
+        `De: 🗓️ ${fmtDateBR(payload.old_date)} às ${(payload.old_time || "").slice(0, 5)} — ${escapeHtml(payload.old_title || "Aula")}\n` +
+        `Para: 🗓️ ${fmtDateBR(payload.new_date)} às ${(payload.new_time || "").slice(0, 5)} — ${escapeHtml(payload.new_title || "Aula")}`;
+
+      const result = await sendTelegram(text);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ===== Notificação de reserva confirmada =====
     const reservationIds: string[] = Array.isArray(payload.reservation_ids)
       ? payload.reservation_ids

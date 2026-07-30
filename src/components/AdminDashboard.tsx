@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle, FileDown, UserPlus, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { Lock, Save, Loader2, Plus, Trash2, Ban, CheckCircle, Users, XCircle, FileDown, UserPlus, ChevronLeft, ChevronRight, Calendar, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -64,6 +64,9 @@ const AdminDashboard = () => {
   const [weeklyReservations, setWeeklyReservations] = useState<Map<string, Reservation[]>>(new Map());
   const [loadingWeekly, setLoadingWeekly] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ classId: string; date: string; label: string } | null>(null);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
+  const [transferTarget, setTransferTarget] = useState<{ classId: string; date: string }>({ classId: "", date: "" });
+  const [transferring, setTransferring] = useState(false);
   const [suspendDate, setSuspendDate] = useState("");
   const [suspendClassId, setSuspendClassId] = useState("");
   const [filterDate, setFilterDate] = useState("");
@@ -388,6 +391,29 @@ const AdminDashboard = () => {
     } catch (e) {
       toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
     }
+  };
+
+  const handleTransfer = async (resId: string) => {
+    if (!transferTarget.classId || !transferTarget.date) {
+      toast.error("Escolha o horário e a data de destino");
+      return;
+    }
+    setTransferring(true);
+    try {
+      await adminCall("transfer_reservation", {
+        id: resId,
+        new_class_id: transferTarget.classId,
+        new_class_date: transferTarget.date,
+      });
+      toast.success("Reserva transferida!");
+      setTransferringId(null);
+      setTransferTarget({ classId: "", date: "" });
+      fetchWeeklyReservations(weekOffset);
+      setSelectedCell(null);
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
+    }
+    setTransferring(false);
   };
 
   const handleMarkAsPaid = async (reservation: Reservation) => {
@@ -971,34 +997,88 @@ const AdminDashboard = () => {
                         ) : (
                           cellStudents.map((r) => {
                             const paid = r.status === "confirmed";
+                            const isTransferring = transferringId === r.id;
                             return (
-                              <div key={r.id} className="flex items-center justify-between p-2.5 bg-secondary rounded-lg border border-border">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${paid ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
-                                      {paid ? "Pago" : "Aguardando"}
-                                    </span>
-                                    <span className="text-sm font-medium">{r.user_name}</span>
+                              <div key={r.id} className="bg-secondary rounded-lg border border-border">
+                                <div className="flex items-center justify-between p-2.5">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${paid ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                                        {paid ? "Pago" : "Aguardando"}
+                                      </span>
+                                      <span className="text-sm font-medium">{r.user_name}</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5">{r.user_email} {r.user_phone && `· ${r.user_phone}`}</p>
                                   </div>
-                                  <p className="text-xs text-muted-foreground mt-0.5">{r.user_email} {r.user_phone && `· ${r.user_phone}`}</p>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      onClick={() => {
+                                        if (isTransferring) {
+                                          setTransferringId(null);
+                                        } else {
+                                          setTransferringId(r.id);
+                                          setTransferTarget({ classId: "", date: "" });
+                                        }
+                                      }}
+                                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                      title="Transferir para outro horário"
+                                    >
+                                      <ArrowLeftRight className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      onClick={async () => {
+                                        if (!confirm("Cancelar esta reserva?")) return;
+                                        try {
+                                          await adminCall("cancel_reservation", { id: r.id });
+                                          toast.success("Reserva cancelada!");
+                                          fetchWeeklyReservations(weekOffset);
+                                          setSelectedCell(null);
+                                        } catch (e) {
+                                          toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
+                                        }
+                                      }}
+                                      className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
                                 </div>
-                                <Button
-                                  size="sm" variant="ghost"
-                                  onClick={async () => {
-                                    if (!confirm("Cancelar esta reserva?")) return;
-                                    try {
-                                      await adminCall("cancel_reservation", { id: r.id });
-                                      toast.success("Reserva cancelada!");
-                                      fetchWeeklyReservations(weekOffset);
-                                      setSelectedCell(null);
-                                    } catch (e) {
-                                      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
-                                    }
-                                  }}
-                                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                </Button>
+                                {isTransferring && (
+                                  <div className="p-2.5 pt-0 space-y-2 border-t border-border mt-1">
+                                    <div className="grid grid-cols-2 gap-2 pt-2">
+                                      <select
+                                        value={transferTarget.classId}
+                                        onChange={(e) => setTransferTarget((t) => ({ ...t, classId: e.target.value }))}
+                                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
+                                      >
+                                        <option value="">Novo horário...</option>
+                                        {[...templates]
+                                          .sort((a, b) => (a.day_of_week ?? 0) - (b.day_of_week ?? 0) || (a.time || "").localeCompare(b.time || ""))
+                                          .map((t) => (
+                                            <option key={t.id} value={t.id}>
+                                              {(t.day_of_week ? DAY_NAMES[t.day_of_week] : "Todos")} {t.time?.slice(0, 5)} — {t.instructor || t.title}
+                                            </option>
+                                          ))}
+                                      </select>
+                                      <Input
+                                        type="date"
+                                        value={transferTarget.date}
+                                        onChange={(e) => setTransferTarget((t) => ({ ...t, date: e.target.value }))}
+                                        className="bg-background border-border h-8 text-xs"
+                                      />
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleTransfer(r.id)}
+                                      disabled={transferring}
+                                      className="w-full h-7 text-xs bg-primary text-primary-foreground"
+                                    >
+                                      {transferring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Confirmar transferência"}
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })

@@ -158,6 +158,78 @@ Deno.serve(async (req) => {
         if (error) throw error;
         return json({ ok: true });
       }
+      case "transfer_reservation": {
+        const { id, new_class_id, new_class_date } = payload as {
+          id: string;
+          new_class_id: string;
+          new_class_date: string;
+        };
+        if (!id || !new_class_id || !new_class_date) {
+          return json({ error: "Campos obrigatórios: id, new_class_id, new_class_date" });
+        }
+
+        const { data: reservation, error: resErr } = await supabase
+          .from("reservations")
+          .select("id, class_id, class_date, status, users(name, phone, email), classes(title, time)")
+          .eq("id", id)
+          .single();
+        if (resErr || !reservation) return json({ error: "Reserva não encontrada" });
+
+        const { data: destClass, error: destErr } = await supabase
+          .from("classes")
+          .select("id, title, time, capacity")
+          .eq("id", new_class_id)
+          .single();
+        if (destErr || !destClass) return json({ error: "Horário de destino não encontrado" });
+
+        const { count } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("class_id", new_class_id)
+          .eq("class_date", new_class_date)
+          .eq("status", "confirmed");
+        if ((count || 0) >= destClass.capacity) {
+          return json({ error: `Horário de destino lotado (${count}/${destClass.capacity} vagas).` });
+        }
+
+        const { error: updErr } = await supabase
+          .from("reservations")
+          .update({ class_id: new_class_id, class_date: new_class_date })
+          .eq("id", id);
+        if (updErr) throw updErr;
+
+        const oldClass = reservation.classes as unknown as { title: string; time: string } | null;
+        const user = reservation.users as unknown as { name: string; phone: string; email: string } | null;
+
+        // Notifica no Telegram (fire-and-forget, não bloqueia a resposta)
+        try {
+          const notifyUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/telegram-notify`;
+          fetch(notifyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "x-internal-secret": Deno.env.get("INTERNAL_FUNCTION_SECRET") || "",
+            },
+            body: JSON.stringify({
+              type: "transfer",
+              user_name: user?.name,
+              user_phone: user?.phone,
+              user_email: user?.email,
+              old_date: reservation.class_date,
+              old_time: oldClass?.time,
+              old_title: oldClass?.title,
+              new_date: new_class_date,
+              new_time: destClass.time,
+              new_title: destClass.title,
+            }),
+          }).catch((e) => console.error("telegram-notify dispatch error:", e));
+        } catch (e) {
+          console.error("telegram-notify trigger error:", e);
+        }
+
+        return json({ ok: true });
+      }
       case "mark_paid": {
         const { reservationId, userId, classId, transactionCode } = payload as {
           reservationId: string;
