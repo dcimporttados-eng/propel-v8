@@ -199,10 +199,11 @@ Deno.serve(async (req) => {
     // final da taxa só é conhecido depois que o cliente escolhe o método de pagamento.
     // Reserva-se uma margem de segurança (cobrindo o pior caso — taxa de cartão) para o
     // split não ultrapassar o valor líquido a receber. A conta dona da API key (agência)
-    // fica automaticamente com o que sobrar do split da cliente, ou seja, o mínimo garantido
-    // pra agência é R$1,00, podendo ser um pouco mais dependendo da taxa real cobrada.
-    const feeBuffer = Math.max(1.2, totalDecimal * 0.05);
-    const clientSplitValue = Math.max(0, Math.round((totalDecimal - 1.0 - feeBuffer) * 100) / 100);
+    // fica automaticamente com o que sobrar do split da cliente — o alvo é ~R$0,70 de
+    // comissão pra agência (pode variar um pouco pra mais ou menos dependendo da taxa real).
+    const AGENCY_TARGET = 0.7;
+    const feeBuffer = Math.max(1.1, totalDecimal * 0.037);
+    const clientSplitValue = Math.max(0, Math.round((totalDecimal - AGENCY_TARGET - feeBuffer) * 100) / 100);
     const splits = clientSplitValue > 0
       ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitValue }]
       : [];

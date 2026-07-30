@@ -17,6 +17,9 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const webhookToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN")!;
+    const asaasApiKey = Deno.env.get("ASAAS_API_KEY")!;
+    const asaasEnv = Deno.env.get("ASAAS_ENV") || "sandbox";
+    const asaasBaseUrl = asaasEnv === "production" ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Valida que a notificação realmente veio do Asaas
@@ -50,23 +53,32 @@ Deno.serve(async (req) => {
     // externalReference pode ser CSV (combo/múltiplas reservas) ou ID único.
     // A Asaas nem sempre propaga o externalReference da CheckoutSession pro Payment —
     // nesse caso, cai pro plano B: casar pelo checkoutSession que salvamos na reserva.
-    let reservations: { id: string; class_id: string; user_id: string; status: string }[] | null = null;
+    type ReservationRow = {
+      id: string;
+      class_id: string;
+      user_id: string;
+      status: string;
+      class_date: string | null;
+      classes: { time: string; title: string } | null;
+    };
+    let reservations: ReservationRow[] | null = null;
+    const SELECT_COLS = "id, class_id, user_id, status, class_date, classes(time, title)";
 
     if (externalRef) {
       const reservationIds = externalRef.split(",").map((s) => s.trim()).filter(Boolean);
       const { data } = await supabase
         .from("reservations")
-        .select("id, class_id, user_id, status")
+        .select(SELECT_COLS)
         .in("id", reservationIds);
-      if (data && data.length > 0) reservations = data;
+      if (data && data.length > 0) reservations = data as unknown as ReservationRow[];
     }
 
     if (!reservations && checkoutSessionId) {
       const { data } = await supabase
         .from("reservations")
-        .select("id, class_id, user_id, status")
+        .select(SELECT_COLS)
         .eq("asaas_checkout_id", checkoutSessionId);
-      if (data && data.length > 0) reservations = data;
+      if (data && data.length > 0) reservations = data as unknown as ReservationRow[];
     }
 
     if (!reservations || reservations.length === 0) {
@@ -126,6 +138,32 @@ Deno.serve(async (req) => {
       }).in("id", reservationIds);
 
       console.log(`✅ ${reservationIds.length} reserva(s) confirmada(s) via Asaas payment ${transactionId}`);
+
+      // A Asaas não propaga a descrição do item da CheckoutSession pro Payment final —
+      // atualiza a descrição do pagamento direto pela API, já com data/horário da reserva.
+      try {
+        const scheduleDesc = reservations
+          .map((r) => {
+            const [y, m, d] = (r.class_date || "").split("-");
+            const dateBr = y && m && d ? `${d}/${m}` : "";
+            const time = (r.classes?.time || "").slice(0, 5);
+            return `${dateBr} ${time}`.trim();
+          })
+          .filter(Boolean)
+          .join(", ");
+        if (scheduleDesc) {
+          const descResp = await fetch(`${asaasBaseUrl}/payments/${transactionId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", access_token: asaasApiKey },
+            body: JSON.stringify({ description: `Reserva Pavilhão 8 — ${scheduleDesc}` }),
+          });
+          if (!descResp.ok) {
+            console.error("Erro ao atualizar descrição do pagamento na Asaas:", await descResp.text());
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao atualizar descrição do pagamento:", e);
+      }
 
       try {
         const notifyUrl = `${supabaseUrl}/functions/v1/telegram-notify`;
