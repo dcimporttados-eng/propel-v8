@@ -79,7 +79,17 @@ const formatBRL = (cents: number) =>
 const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalProps) => {
   const [step, setStep] = useState(1); // 1=seleção, 2=resumo, 3=dados, 4=pagamento
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [form, setForm] = useState({ name: "", phone: "", email: "" });
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    cpfCnpj: "",
+    postalCode: "",
+    address: "",
+    addressNumber: "",
+    complement: "",
+    province: "",
+  });
   const [templates, setTemplates] = useState<ClassTemplate[]>([]);
   const [suspSet, setSuspSet] = useState<Set<string>>(new Set());
   const [reservationCounts, setReservationCounts] = useState<Map<string, number>>(new Map());
@@ -137,7 +147,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const resetAndClose = () => {
     setStep(1);
     setCart([]);
-    setForm({ name: "", phone: "", email: "" });
+    setForm({ name: "", phone: "", email: "", cpfCnpj: "", postalCode: "", address: "", addressNumber: "", complement: "", province: "" });
     setSelectedDay("");
     setCheckoutUrl("");
     setWeekIndex(0);
@@ -185,7 +195,15 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.email || cart.length === 0) return;
+    const cpfDigits = form.cpfCnpj.replace(/\D/g, "");
+    if (
+      !form.name || !form.phone || !form.email || cart.length === 0 ||
+      !form.postalCode || !form.address || !form.addressNumber || !form.province ||
+      (cpfDigits.length !== 11 && cpfDigits.length !== 14)
+    ) {
+      toast.error("Preencha todos os dados, incluindo CPF/CNPJ e endereço válidos.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -200,6 +218,12 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           name: form.name,
           email: form.email,
           phone: form.phone,
+          cpfCnpj: cpfDigits,
+          postalCode: form.postalCode.replace(/\D/g, ""),
+          address: form.address,
+          addressNumber: form.addressNumber,
+          complement: form.complement,
+          province: form.province,
         },
       });
 
@@ -486,6 +510,34 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 <div>
                   <Label htmlFor="email">E-mail</Label>
                   <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="seu@email.com" className="bg-secondary border-border mt-1" required maxLength={255} />
+                </div>
+                <div>
+                  <Label htmlFor="cpfCnpj">CPF</Label>
+                  <Input id="cpfCnpj" value={form.cpfCnpj} onChange={(e) => setForm({ ...form, cpfCnpj: e.target.value })} placeholder="000.000.000-00" className="bg-secondary border-border mt-1" required maxLength={18} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="postalCode">CEP</Label>
+                    <Input id="postalCode" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} placeholder="00000-000" className="bg-secondary border-border mt-1" required maxLength={9} />
+                  </div>
+                  <div>
+                    <Label htmlFor="province">Bairro</Label>
+                    <Input id="province" value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })} placeholder="Seu bairro" className="bg-secondary border-border mt-1" required maxLength={100} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <Label htmlFor="address">Endereço</Label>
+                    <Input id="address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua/Av." className="bg-secondary border-border mt-1" required maxLength={150} />
+                  </div>
+                  <div>
+                    <Label htmlFor="addressNumber">Número</Label>
+                    <Input id="addressNumber" value={form.addressNumber} onChange={(e) => setForm({ ...form, addressNumber: e.target.value })} placeholder="Nº" className="bg-secondary border-border mt-1" required maxLength={20} />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="complement">Complemento (opcional)</Label>
+                  <Input id="complement" value={form.complement} onChange={(e) => setForm({ ...form, complement: e.target.value })} placeholder="Apto, bloco, etc." className="bg-secondary border-border mt-1" maxLength={100} />
                 </div>
                 <Button type="submit" disabled={submitting} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-6 hover:scale-[1.02] transition-transform">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar {formatBRL(priceBreakdown.total)} <ExternalLink className="w-4 h-4 ml-2" /></>}

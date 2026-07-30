@@ -40,11 +40,17 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload = await req.json();
-    const { name, email, phone } = payload;
+    const { name, email, phone, cpfCnpj, postalCode, address, addressNumber, complement, province } = payload;
 
     const normalizedName = typeof name === "string" ? name.trim() : "";
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const normalizedPhone = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+    const normalizedCpfCnpj = typeof cpfCnpj === "string" ? cpfCnpj.replace(/\D/g, "") : "";
+    const normalizedPostalCode = typeof postalCode === "string" ? postalCode.replace(/\D/g, "") : "";
+    const normalizedAddress = typeof address === "string" ? address.trim() : "";
+    const normalizedAddressNumber = typeof addressNumber === "string" ? addressNumber.trim() : "";
+    const normalizedComplement = typeof complement === "string" ? complement.trim() : "";
+    const normalizedProvince = typeof province === "string" ? province.trim() : "";
 
     // Aceita modo legado (class_id + class_date) ou novo (items[])
     let items: CartItem[] = [];
@@ -56,9 +62,13 @@ Deno.serve(async (req) => {
       items = [{ class_id: payload.class_id, class_date: payload.class_date }];
     }
 
-    if (items.length === 0 || !normalizedName || !normalizedEmail || !normalizedPhone) {
+    if (
+      items.length === 0 || !normalizedName || !normalizedEmail || !normalizedPhone ||
+      !normalizedPostalCode || !normalizedAddress || !normalizedAddressNumber || !normalizedProvince ||
+      (normalizedCpfCnpj.length !== 11 && normalizedCpfCnpj.length !== 14)
+    ) {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: items, name, email, phone" }),
+        JSON.stringify({ error: "Campos obrigatórios: items, name, email, phone, cpfCnpj, postalCode, address, addressNumber, province" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -225,6 +235,17 @@ Deno.serve(async (req) => {
           value: totalDecimal,
         },
       ],
+      customerData: {
+        name: normalizedName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        cpfCnpj: normalizedCpfCnpj,
+        postalCode: normalizedPostalCode,
+        address: normalizedAddress,
+        addressNumber: normalizedAddressNumber,
+        complement: normalizedComplement || undefined,
+        province: normalizedProvince,
+      },
       splits,
       externalReference,
     };
