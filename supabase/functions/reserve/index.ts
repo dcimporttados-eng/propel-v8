@@ -1,4 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  CAMPAIGN,
+  DEFAULT_PRICE_CENTS,
+  MAX_ITEMS_PER_ORDER,
+  ORDER_TTL_MINUTES,
+  computeClientSplitCents,
+  getDiscountPercent,
+} from "../_shared/campaign.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,11 +14,29 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const REGULAR_PRICE_CENTS = 2990; // R$29,90 por aula
-
 interface CartItem {
   class_id: string;
   class_date?: string;
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+/** Traduz os erros das RPCs para mensagens que o cliente entende. */
+function friendlyError(message: string): { text: string; status: number } {
+  if (message.includes("NO_SEATS:")) {
+    const detail = message.split("NO_SEATS:")[1]?.split("\n")[0]?.trim() || "";
+    return { text: `Sem vaga disponível: ${detail}. Escolha outro horário.`, status: 409 };
+  }
+  if (message.includes("CLASS_DISABLED:")) {
+    return { text: "Um dos horários escolhidos não está mais disponível.", status: 409 };
+  }
+  if (message.includes("CLASS_NOT_FOUND")) return { text: "Aula não encontrada", status: 404 };
+  if (message.includes("EMPTY_ORDER")) return { text: "Pedido sem itens", status: 400 };
+  return { text: "Erro ao criar reserva", status: 500 };
 }
 
 Deno.serve(async (req) => {
@@ -18,17 +44,22 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let createdOrderId: string | null = null;
+  let supabaseForCleanup: ReturnType<typeof createClient> | null = null;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const asaasApiKey = Deno.env.get("ASAAS_API_KEY")!;
-    // ASAAS_FEE_WALLET_ID não é mais usado em split explícito: a API key é da própria
-    // agência, então o que não for enviado à cliente via split já fica automaticamente
-    // na conta da agência — não há necessidade de um split "de volta para si mesmo".
-    const asaasClientWalletId = Deno.env.get("ASAAS_CLIENT_WALLET_ID")!; // recebe a maior parte via split
-    const asaasEnv = Deno.env.get("ASAAS_ENV") || "sandbox"; // "sandbox" ou "production"
-    const asaasBaseUrl = asaasEnv === "production" ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
+    // A API key é da própria agência: o que não for enviado à cliente via split
+    // já fica automaticamente na conta da agência.
+    const asaasClientWalletId = Deno.env.get("ASAAS_CLIENT_WALLET_ID")!;
+    const asaasEnv = Deno.env.get("ASAAS_ENV") || "sandbox";
+    const asaasBaseUrl = asaasEnv === "production"
+      ? "https://api.asaas.com/v3"
+      : "https://api-sandbox.asaas.com/v3";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseForCleanup = supabase;
 
     const payload = await req.json();
     const { name, email, phone, cpfCnpj, postalCode, address, addressNumber, complement, province } = payload;
@@ -58,60 +89,30 @@ Deno.serve(async (req) => {
       !normalizedPostalCode || !normalizedAddress || !normalizedAddressNumber || !normalizedProvince ||
       (normalizedCpfCnpj.length !== 11 && normalizedCpfCnpj.length !== 14)
     ) {
-      return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: items, name, email, phone, cpfCnpj, postalCode, address, addressNumber, province" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({
+        error: "Campos obrigatórios: items, name, email, phone, cpfCnpj, postalCode, address, addressNumber, province",
+      }, 400);
     }
 
-    if (items.length > 10) {
-      return new Response(
-        JSON.stringify({ error: "Máximo de 10 reservas por pedido" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (items.length > MAX_ITEMS_PER_ORDER) {
+      return json({ error: `Máximo de ${MAX_ITEMS_PER_ORDER} reservas por pedido` }, 400);
     }
 
-    // Detecta itens duplicados (mesma aula+data)
+    if (items.some((it) => !it.class_date)) {
+      return json({ error: "Toda aula precisa de uma data" }, 400);
+    }
+
+    // Duplicados no mesmo pedido
     const seen = new Set<string>();
     for (const it of items) {
-      const key = `${it.class_id}_${it.class_date || ""}`;
+      const key = `${it.class_id}_${it.class_date}`;
       if (seen.has(key)) {
-        return new Response(
-          JSON.stringify({ error: "Há horários duplicados na seleção" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return json({ error: "Há horários duplicados na seleção" }, 400);
       }
       seen.add(key);
     }
 
-    // Verifica vagas e busca dados de cada aula em paralelo
-    const enriched = await Promise.all(items.map(async (it) => {
-      const rpcParams: Record<string, unknown> = { p_class_id: it.class_id };
-      if (it.class_date) rpcParams.p_date = it.class_date;
-      const [{ data: spots, error: spotsErr }, { data: cls, error: clsErr }] = await Promise.all([
-        supabase.rpc("get_available_spots", rpcParams),
-        supabase.from("classes").select("*").eq("id", it.class_id).single(),
-      ]);
-      if (spotsErr) throw new Error(`Erro ao verificar vagas: ${spotsErr.message}`);
-      if (clsErr || !cls) throw new Error("Aula não encontrada");
-      return { item: it, spots: spots as number, classData: cls };
-    }));
-
-    const lotada = enriched.find((e) => e.spots <= 0);
-    if (lotada) {
-      return new Response(
-        JSON.stringify({ error: `Aula "${lotada.classData.title}" lotada` }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ===== Cálculo de preço (server-side, fonte da verdade) =====
-    let totalCents = 0;
-    for (const e of enriched) {
-      totalCents += e.classData.price || REGULAR_PRICE_CENTS;
-    }
-
-    // Create or find user
+    // ===== Usuário =====
     const { data: existingUser } = await supabase
       .from("users")
       .select("id")
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
 
     let userId: string;
     if (existingUser) {
-      userId = existingUser.id;
+      userId = existingUser.id as string;
       await supabase.from("users").update({ name: normalizedName, phone: normalizedPhone }).eq("id", userId);
     } else {
       const { data: newUser, error: userError } = await supabase
@@ -129,139 +130,184 @@ Deno.serve(async (req) => {
         .select("id")
         .single();
       if (userError || !newUser) throw new Error(`Erro ao criar usuário: ${userError?.message}`);
-      userId = newUser.id;
+      userId = newUser.id as string;
     }
 
-    // Cria N reservas pendentes
-    const rowsToInsert = enriched.map((e) => {
-      const row: Record<string, unknown> = {
-        user_id: userId,
-        class_id: e.item.class_id,
-        status: "pending",
-        combo_aplicado: false,
-      };
-      if (e.item.class_date) row.class_date = e.item.class_date;
-      return row;
+    // ===== Pedido (atômico) =====
+    // A RPC valida TODAS as vagas sob lock, cria o pedido e as reservas numa
+    // única transação. Qualquer horário indisponível => nada é criado.
+    const discountPercent = getDiscountPercent(items.length);
+
+    const { data: orderData, error: orderError } = await supabase.rpc("create_booking_order", {
+      p_user_id: userId,
+      p_items: items.map((it) => ({ class_id: it.class_id, class_date: it.class_date })),
+      p_campaign_id: CAMPAIGN.id,
+      p_discount_percent: discountPercent,
+      p_ttl_minutes: ORDER_TTL_MINUTES,
+      p_default_price: DEFAULT_PRICE_CENTS,
     });
 
-    const { data: createdReservations, error: resError } = await supabase
-      .from("reservations")
-      .insert(rowsToInsert)
-      .select("id");
-
-    if (resError || !createdReservations || createdReservations.length === 0) {
-      throw new Error(`Erro ao criar reservas: ${resError?.message}`);
+    if (orderError) {
+      const { text, status } = friendlyError(orderError.message || "");
+      console.error("create_booking_order failed:", orderError.message);
+      return json({ error: text }, status);
     }
 
-    const reservationIds = createdReservations.map((r) => r.id);
-    // external_reference no formato CSV — webhook itera sobre todos
-    const externalReference = reservationIds.join(",");
+    const order = orderData as {
+      order_id: string;
+      items_count: number;
+      subtotal_cents: number;
+      discount_percent: number;
+      discount_cents: number;
+      total_cents: number;
+      reservation_ids: string[];
+    };
+    createdOrderId = order.order_id;
 
-    // Create Asaas Checkout (com split de R$1,00 fixo para a conta do Pavilhão 8)
-    const totalDecimal = totalCents / 100;
+    const reservationIds = order.reservation_ids || [];
+    const totalCents = order.total_cents;
 
-    const itemsTitle = enriched.length === 1
-      ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
-      : `${enriched.length} aulas — Pavilhão 8`;
+    // ===== Dados para o checkout =====
+    const { data: classRows } = await supabase
+      .from("classes")
+      .select("id, title, time")
+      .in("id", items.map((it) => it.class_id));
+    const classMap = new Map((classRows || []).map((c) => [c.id as string, c]));
 
-    // Data(s)/horário(s) da(s) aula(s) reservada(s), pra aparecer na descrição da cobrança na Asaas
-    const scheduleDesc = enriched
-      .map((e) => {
-        const [y, m, d] = (e.item.class_date || "").split("-");
+    const itemsTitle = items.length === 1
+      ? `${classMap.get(items[0].class_id)?.title || "Aula"} — ${items[0].class_date}`
+      : `${items.length} aulas — Pavilhão 8`;
+
+    const scheduleDesc = items
+      .map((it) => {
+        const [y, m, d] = (it.class_date || "").split("-");
         const dateBr = y && m && d ? `${d}/${m}` : "";
-        const time = (e.classData.time || "").slice(0, 5);
+        const time = ((classMap.get(it.class_id)?.time as string) || "").slice(0, 5);
         return `${dateBr} ${time}`.trim();
       })
       .filter(Boolean)
       .join(", ");
 
-    // Asaas desconta a própria taxa (cartão/Pix) ANTES de aplicar os splits, e o valor
-    // final da taxa só é conhecido depois que o cliente escolhe o método de pagamento.
-    // Reserva-se uma margem de segurança (cobrindo o pior caso — taxa de cartão) para o
-    // split não ultrapassar o valor líquido a receber. A conta dona da API key (agência)
-    // fica automaticamente com o que sobrar do split da cliente — o alvo é ~R$0,70 de
-    // comissão pra agência (pode variar um pouco pra mais ou menos dependendo da taxa real).
-    const AGENCY_TARGET = 0.7;
-    const feeBuffer = Math.max(1.1, totalDecimal * 0.037);
-    const clientSplitValue = Math.max(0, Math.round((totalDecimal - AGENCY_TARGET - feeBuffer) * 100) / 100);
-    const splits = clientSplitValue > 0
-      ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitValue }]
-      : [];
+    const discountSuffix = order.discount_percent > 0
+      ? ` (${order.items_count} aulas — ${order.discount_percent}% OFF)`
+      : "";
 
-    const checkoutPayload = {
-      billingTypes: ["PIX", "CREDIT_CARD"],
-      chargeTypes: ["DETACHED"],
-      minutesToExpire: 30,
-      callback: {
-        successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
-        cancelUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=failed`,
-        expiredUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=pending`,
-      },
-      items: [
-        {
-          name: itemsTitle,
-          description: `Reserva Pavilhão 8 — ${normalizedName}${scheduleDesc ? ` — ${scheduleDesc}` : ""}`,
-          quantity: 1,
-          value: totalDecimal,
+    // ===== Checkout Asaas =====
+    // A Asaas desconta a taxa dela ANTES dos splits e só sabemos qual taxa será
+    // aplicada depois que o cliente escolhe o meio de pagamento. Reservamos o
+    // pior caso; se ainda assim a Asaas recusar, tentamos de novo com uma
+    // reserva maior em vez de falhar o pedido inteiro.
+    const buildCheckoutPayload = (feeInflationCents: number) => {
+      const clientSplitCents = computeClientSplitCents(totalCents, order.items_count, feeInflationCents);
+      const splits = clientSplitCents > 0
+        ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitCents / 100 }]
+        : [];
+      return {
+        billingTypes: ["PIX", "CREDIT_CARD"],
+        chargeTypes: ["DETACHED"],
+        minutesToExpire: ORDER_TTL_MINUTES,
+        callback: {
+          successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
+          cancelUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=failed`,
+          expiredUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=pending`,
         },
-      ],
-      customerData: {
-        name: normalizedName,
-        email: normalizedEmail,
-        phone: normalizedPhone,
-        cpfCnpj: normalizedCpfCnpj,
-        postalCode: normalizedPostalCode,
-        address: normalizedAddress,
-        addressNumber: normalizedAddressNumber,
-        complement: normalizedComplement || undefined,
-        province: normalizedProvince,
-      },
-      splits,
-      externalReference,
+        items: [
+          {
+            name: itemsTitle,
+            description:
+              `Reserva Pavilhão 8 — ${normalizedName}${scheduleDesc ? ` — ${scheduleDesc}` : ""}${discountSuffix}`,
+            quantity: 1,
+            value: totalCents / 100,
+          },
+        ],
+        customerData: {
+          name: normalizedName,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          cpfCnpj: normalizedCpfCnpj,
+          postalCode: normalizedPostalCode,
+          address: normalizedAddress,
+          addressNumber: normalizedAddressNumber,
+          complement: normalizedComplement || undefined,
+          province: normalizedProvince,
+        },
+        splits,
+        // Só o ID do pedido: o webhook resolve as reservas a partir dele.
+        externalReference: order.order_id,
+      };
     };
 
-    const asaasResponse = await fetch(`${asaasBaseUrl}/checkouts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        access_token: asaasApiKey,
-      },
-      body: JSON.stringify(checkoutPayload),
-    });
+    let asaasData: Record<string, unknown> | null = null;
+    for (const inflation of [0, 300, 1000]) {
+      const resp = await fetch(`${asaasBaseUrl}/checkouts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", access_token: asaasApiKey },
+        body: JSON.stringify(buildCheckoutPayload(inflation)),
+      });
 
-    if (!asaasResponse.ok) {
-      const errBody = await asaasResponse.text();
-      console.error(`Asaas checkout error ${asaasResponse.status}: ${errBody}`);
-      throw new Error("Erro ao gerar link de pagamento");
+      if (resp.ok) {
+        asaasData = await resp.json();
+        break;
+      }
+
+      const errBody = await resp.text();
+      console.error(`Asaas checkout error ${resp.status} (inflation=${inflation}): ${errBody}`);
+      // Só vale repetir quando o split estourou o líquido; outros erros são finais.
+      if (!errBody.includes("Split")) break;
     }
 
-    const asaasData = await asaasResponse.json();
-    const checkoutUrl = asaasData.link || asaasData.url || asaasData.checkoutUrl;
-    console.log("Asaas checkout created:", asaasData.id, "url:", checkoutUrl);
+    if (!asaasData) {
+      // Libera as vagas na hora, sem esperar a expiração.
+      await supabase.from("reservations").update({ status: "canceled" }).eq("order_id", order.order_id);
+      await supabase.from("booking_orders")
+        .update({ status: "canceled", notes: "Falha ao criar checkout na Asaas" })
+        .eq("id", order.order_id);
+      createdOrderId = null;
+      return json({ error: "Erro ao gerar link de pagamento" }, 502);
+    }
 
-    // A Asaas não propaga o externalReference da CheckoutSession pro Payment gerado
-    // ao concluir o pagamento — guardamos o ID da sessão como plano B para o webhook.
+    const checkoutUrl = (asaasData.link || asaasData.url || asaasData.checkoutUrl) as string;
+    console.log(`Order ${order.order_id}: checkout ${asaasData.id} — ${checkoutUrl}`);
+
+    // Plano B do webhook: a Asaas nem sempre propaga o externalReference da
+    // CheckoutSession para o Payment gerado.
     if (asaasData.id) {
-      await supabase.from("reservations").update({ asaas_checkout_id: asaasData.id }).in("id", reservationIds);
+      await supabase.from("booking_orders")
+        .update({ asaas_checkout_id: asaasData.id as string })
+        .eq("id", order.order_id);
+      await supabase.from("reservations")
+        .update({ asaas_checkout_id: asaasData.id as string })
+        .eq("order_id", order.order_id);
     }
 
-    return new Response(
-      JSON.stringify({
-        reservation_id: reservationIds[0],
-        reservation_ids: reservationIds,
-        checkout_url: checkoutUrl,
-        class_title: itemsTitle,
-        total_cents: totalCents,
-        combo_applied: false,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({
+      order_id: order.order_id,
+      reservation_id: reservationIds[0],
+      reservation_ids: reservationIds,
+      checkout_url: checkoutUrl,
+      class_title: itemsTitle,
+      items_count: order.items_count,
+      subtotal_cents: order.subtotal_cents,
+      discount_percent: order.discount_percent,
+      discount_cents: order.discount_cents,
+      total_cents: totalCents,
+      campaign_applied: order.discount_percent > 0,
+    });
   } catch (error: unknown) {
     console.error("Reserve error:", error);
+    // Nunca deixa vagas presas por um pedido que não chegou a virar cobrança.
+    if (createdOrderId && supabaseForCleanup) {
+      try {
+        await supabaseForCleanup.from("reservations").update({ status: "canceled" }).eq("order_id", createdOrderId);
+        await supabaseForCleanup.from("booking_orders")
+          .update({ status: "canceled", notes: "Erro inesperado durante a criação do pedido" })
+          .eq("id", createdOrderId);
+      } catch (cleanupErr) {
+        console.error("Cleanup failed:", cleanupErr);
+      }
+    }
     const message = error instanceof Error ? error.message : "Erro interno";
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const { text, status } = friendlyError(message);
+    return json({ error: status === 500 ? message : text }, status);
   }
 });

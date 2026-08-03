@@ -3,14 +3,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, X, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DEFAULT_PRICE_CENTS as REGULAR_PRICE_CENTS,
+  MAX_ITEMS_PER_ORDER,
+  computeOrderPrice,
+  getNextTier,
+  isCampaignActive,
+  tiersLabel,
+} from "@/config/campaign";
 
 const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-
-const REGULAR_PRICE_CENTS = 2990;
 
 interface ClassTemplate {
   id: string;
@@ -155,8 +161,8 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setCart((prev) => {
       const exists = prev.find((c) => c.key === key);
       if (exists) return prev.filter((c) => c.key !== key);
-      if (prev.length >= 10) {
-        toast.error("Máximo de 10 reservas por pedido");
+      if (prev.length >= MAX_ITEMS_PER_ORDER) {
+        toast.error(`Máximo de ${MAX_ITEMS_PER_ORDER} reservas por pedido`);
         return prev;
       }
       return [...prev, { key, occurrence: occ }];
@@ -167,11 +173,14 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setCart((prev) => prev.filter((c) => c.key !== key));
   };
 
-  // Cálculo do total no front (espelha a lógica do servidor — servidor é a fonte da verdade)
-  const priceBreakdown = useMemo(() => {
-    const total = cart.reduce((a, c) => a + (c.occurrence.template.price || REGULAR_PRICE_CENTS), 0);
-    return { total };
-  }, [cart]);
+  // Espelha a aritmética do servidor — mas o valor cobrado é sempre o que o
+  // backend recalcula; isto aqui é só exibição.
+  const priceBreakdown = useMemo(
+    () => computeOrderPrice(cart.map((c) => c.occurrence.template.price || REGULAR_PRICE_CENTS)),
+    [cart],
+  );
+  const nextTier = useMemo(() => getNextTier(cart.length), [cart.length]);
+  const campaignOn = useMemo(() => isCampaignActive(), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,6 +270,17 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           ))}
         </div>
 
+
+        {/* Chamada discreta da campanha */}
+        {campaignOn && step === 1 && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/25">
+            <Tag className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+            <div className="text-[11px] leading-snug">
+              <p className="font-semibold text-primary">Quanto mais aulas, maior o desconto</p>
+              <p className="text-muted-foreground">{tiersLabel()}</p>
+            </div>
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {step === 1 && (
@@ -359,11 +379,28 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   {/* Mini-resumo flutuante */}
                   {cart.length > 0 && (
                     <div className="sticky bottom-0 -mx-6 px-6 pt-3 pb-1 bg-card border-t border-border">
+                      {priceBreakdown.discountPercent > 0 && (
+                        <p className="text-[11px] font-bold text-primary mb-1">
+                          {priceBreakdown.itemsCount} aulas — {priceBreakdown.discountPercent}% OFF · você economiza {formatBRL(priceBreakdown.discountCents)}
+                        </p>
+                      )}
+                      {priceBreakdown.discountPercent === 0 && nextTier && (
+                        <p className="text-[11px] text-muted-foreground mb-1">
+                          Adicione {nextTier.items - cart.length} aula{nextTier.items - cart.length === 1 ? "" : "s"} e ganhe {nextTier.percent}% OFF
+                        </p>
+                      )}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">
                           {cart.length} {cart.length === 1 ? "aula" : "aulas"} selecionada{cart.length === 1 ? "" : "s"}
                         </span>
-                        <span className="font-bold text-lg">{formatBRL(priceBreakdown.total)}</span>
+                        <span className="font-bold text-lg">
+                          {priceBreakdown.discountCents > 0 && (
+                            <span className="text-xs text-muted-foreground line-through mr-1.5 font-normal">
+                              {formatBRL(priceBreakdown.subtotalCents)}
+                            </span>
+                          )}
+                          {formatBRL(priceBreakdown.totalCents)}
+                        </span>
                       </div>
                       <Button
                         onClick={() => setStep(2)}
@@ -403,10 +440,36 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 })}
               </div>
 
+              {priceBreakdown.discountPercent > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/15 border border-primary">
+                  <Tag className="w-4 h-4 text-primary flex-shrink-0" />
+                  <p className="text-xs font-bold text-primary">
+                    {priceBreakdown.itemsCount} aulas — {priceBreakdown.discountPercent}% OFF
+                  </p>
+                </div>
+              )}
+              {priceBreakdown.discountPercent === 0 && nextTier && (
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Adicione {nextTier.items - cart.length} aula{nextTier.items - cart.length === 1 ? "" : "s"} e ganhe {nextTier.percent}% OFF
+                </p>
+              )}
+
               <div className="border-t border-border pt-3 space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{priceBreakdown.itemsCount} {priceBreakdown.itemsCount === 1 ? "aula" : "aulas"}</span>
+                  <span className={priceBreakdown.discountCents > 0 ? "line-through" : ""}>
+                    {formatBRL(priceBreakdown.subtotalCents)}
+                  </span>
+                </div>
+                {priceBreakdown.discountCents > 0 && (
+                  <div className="flex justify-between text-xs text-primary">
+                    <span>Desconto ({priceBreakdown.discountPercent}%)</span>
+                    <span>− {formatBRL(priceBreakdown.discountCents)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-lg pt-1">
                   <span>Total</span>
-                  <span>{formatBRL(priceBreakdown.total)}</span>
+                  <span>{formatBRL(priceBreakdown.totalCents)}</span>
                 </div>
               </div>
 
@@ -426,7 +489,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           {step === 3 && (
             <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <p className="text-sm text-muted-foreground mb-4">
-                {cart.length} {cart.length === 1 ? "aula" : "aulas"} — Total {formatBRL(priceBreakdown.total)}
+                {cart.length} {cart.length === 1 ? "aula" : "aulas"} — Total {formatBRL(priceBreakdown.totalCents)}
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -470,7 +533,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   <Input id="complement" value={form.complement} onChange={(e) => setForm({ ...form, complement: e.target.value })} placeholder="Apto, bloco, etc." className="bg-secondary border-border mt-1" maxLength={100} />
                 </div>
                 <Button type="submit" disabled={submitting} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-6 hover:scale-[1.02] transition-transform">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar {formatBRL(priceBreakdown.total)} <ExternalLink className="w-4 h-4 ml-2" /></>}
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar {formatBRL(priceBreakdown.totalCents)} <ExternalLink className="w-4 h-4 ml-2" /></>}
                 </Button>
                 <Button variant="ghost" type="button" onClick={() => setStep(2)} className="text-muted-foreground text-sm w-full">← Voltar</Button>
               </form>
@@ -484,7 +547,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               </div>
               <h3 className="text-lg font-bold mb-2">Reserva criada!</h3>
               <p className="text-muted-foreground text-sm mb-1">
-                {cart.length} {cart.length === 1 ? "aula reservada" : "aulas reservadas"} — Total {formatBRL(priceBreakdown.total)}
+                {cart.length} {cart.length === 1 ? "aula reservada" : "aulas reservadas"} — Total {formatBRL(priceBreakdown.totalCents)}
               </p>
               <p className="text-muted-foreground text-sm mb-4">Clique no botão abaixo para realizar o pagamento:</p>
 

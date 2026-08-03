@@ -27,44 +27,60 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Clean up pending checkout attempts older than 35 minutes (checkout da Asaas expira em 30min)
-    const expiryThreshold = new Date(Date.now() - 35 * 60 * 1000).toISOString();
+    // 1) Pedidos (booking_orders) vencidos: a RPC expira o pedido e libera as
+    //    reservas numa única transação. As vagas, porém, já são liberadas na
+    //    prática assim que expires_at passa — a disponibilidade filtra por isso.
+    const { data: orderResult, error: orderError } = await supabase.rpc("expire_booking_orders");
+    if (orderError) {
+      console.error("expire_booking_orders failed:", orderError.message);
+      throw orderError;
+    }
+    const orders = orderResult as { orders_expired: number; reservations_freed: number };
 
-    const { data: expired, error: fetchError } = await supabase
+    // 2) Reservas legadas (sem pedido vinculado, anteriores a booking_orders):
+    //    seguem a regra antiga, baseada em created_at.
+    const legacyThreshold = new Date(Date.now() - 35 * 60 * 1000).toISOString();
+    const { data: legacyExpired, error: fetchError } = await supabase
       .from("reservations")
       .select("id")
       .eq("status", "pending")
-      .lt("created_at", expiryThreshold);
+      .is("order_id", null)
+      .lt("created_at", legacyThreshold);
 
     if (fetchError) {
-      console.error("Error fetching expired reservations:", fetchError.message);
+      console.error("Error fetching legacy expired reservations:", fetchError.message);
       throw fetchError;
     }
 
-    if (!expired || expired.length === 0) {
-      console.log("No expired reservations found");
-      return new Response(
-        JSON.stringify({ canceled: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    let legacyCanceled = 0;
+    if (legacyExpired && legacyExpired.length > 0) {
+      const ids = legacyExpired.map((r) => r.id);
+      const { error: updateError } = await supabase
+        .from("reservations")
+        .update({ status: "canceled" })
+        .in("id", ids);
+      if (updateError) {
+        console.error("Error canceling legacy reservations:", updateError.message);
+        throw updateError;
+      }
+      legacyCanceled = ids.length;
+    }
+
+    const totalFreed = (orders?.reservations_freed || 0) + legacyCanceled;
+    if (totalFreed > 0) {
+      console.log(
+        `Expirados: ${orders?.orders_expired || 0} pedido(s), ` +
+        `${orders?.reservations_freed || 0} reserva(s) + ${legacyCanceled} legada(s)`
       );
     }
 
-    const ids = expired.map((r) => r.id);
-
-    const { error: updateError } = await supabase
-      .from("reservations")
-      .update({ status: "canceled" })
-      .in("id", ids);
-
-    if (updateError) {
-      console.error("Error canceling reservations:", updateError.message);
-      throw updateError;
-    }
-
-    console.log(`Canceled ${ids.length} expired reservations`);
-
     return new Response(
-      JSON.stringify({ canceled: ids.length }),
+      JSON.stringify({
+        orders_expired: orders?.orders_expired || 0,
+        reservations_freed: orders?.reservations_freed || 0,
+        legacy_canceled: legacyCanceled,
+        canceled: totalFreed,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {

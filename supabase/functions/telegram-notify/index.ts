@@ -196,6 +196,30 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== Alerta: pagamento recebido que não pôde ser honrado =====
+    if (type === "order_alert") {
+      const motivo = payload.reason === "seats_taken"
+        ? `Vagas já ocupadas em: ${escapeHtml(payload.detail || "")}`
+        : payload.reason === "amount_mismatch"
+          ? "Valor pago diferente do valor do pedido"
+          : escapeHtml(String(payload.reason || "desconhecido"));
+
+      const text =
+        `🚨 <b>ATENÇÃO — Pagamento requer revisão</b>\n` +
+        `Um pagamento foi recebido mas o pedido <b>não foi confirmado</b>.\n\n` +
+        `⚠️ Motivo: ${motivo}\n` +
+        (payload.amount_cents ? `💰 Valor recebido: ${fmtMoney(payload.amount_cents)}\n` : "") +
+        `🧾 Transação Asaas: ${escapeHtml(String(payload.transaction_id || ""))}\n` +
+        `📦 Pedido: ${escapeHtml(String(payload.order_id || ""))}\n\n` +
+        `<b>Ação necessária:</b> estornar na Asaas ou realocar o(s) horário(s) com o cliente.`;
+
+      const result = await sendTelegram(text);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ===== Notificação de transferência de reserva =====
     if (type === "transfer") {
       const text =
