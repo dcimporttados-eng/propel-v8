@@ -3,23 +3,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
+import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
-// Promo "Combo 2 aulas por R$39,90" — válida em maio/2026
-const PROMO_START = "2026-04-29";
-const PROMO_END = "2026-07-01";
-const COMBO_PRICE_CENTS = 3990;
 const REGULAR_PRICE_CENTS = 2990;
-
-function isPromoActiveNow(): boolean {
-  const today = new Date().toISOString().slice(0, 10);
-  return today >= PROMO_START && today <= PROMO_END;
-}
 
 interface ClassTemplate {
   id: string;
@@ -100,8 +91,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
 
-  const promoActive = useMemo(() => isPromoActiveNow(), []);
-
   useEffect(() => {
     if (!open) return;
 
@@ -180,18 +169,9 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
   // Cálculo do total no front (espelha a lógica do servidor — servidor é a fonte da verdade)
   const priceBreakdown = useMemo(() => {
-    if (cart.length === 0) return { total: 0, original: 0, savings: 0, comboApplied: false };
-    const prices = cart.map((c) => c.occurrence.template.price || REGULAR_PRICE_CENTS);
-    const original = prices.reduce((a, b) => a + b, 0);
-    let total = original;
-    let comboApplied = false;
-    if (promoActive && cart.length >= 2) {
-      comboApplied = true;
-      const sorted = [...prices].sort((a, b) => a - b);
-      total = COMBO_PRICE_CENTS + sorted.slice(2).reduce((a, b) => a + b, 0);
-    }
-    return { total, original, savings: original - total, comboApplied };
-  }, [cart, promoActive]);
+    const total = cart.reduce((a, c) => a + (c.occurrence.template.price || REGULAR_PRICE_CENTS), 0);
+    return { total };
+  }, [cart]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -281,27 +261,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           ))}
         </div>
 
-        {/* Banner promo combos (5+1 / 10+2) */}
-        {step === 1 && (
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/10 border border-primary/30">
-            <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-xs space-y-1">
-              <p className="font-bold text-primary">Combos: 5 aulas → ganhe 1 · 10 aulas → ganhe 2</p>
-              <p className="text-muted-foreground">
-                Reserve e pague 5 ou 10 aulas de uma vez. Após o pagamento, envie o comprovante no WhatsApp{" "}
-                <a
-                  href="https://wa.me/5551980467233"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-foreground underline"
-                >
-                  (51) 98046-7233
-                </a>{" "}
-                para agendar sua(s) aula(s) bônus.
-              </p>
-            </div>
-          </div>
-        )}
 
         <AnimatePresence mode="wait">
           {step === 1 && (
@@ -404,14 +363,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                         <span className="text-sm text-muted-foreground">
                           {cart.length} {cart.length === 1 ? "aula" : "aulas"} selecionada{cart.length === 1 ? "" : "s"}
                         </span>
-                        <span className="font-bold text-lg">
-                          {priceBreakdown.comboApplied && (
-                            <span className="text-xs text-muted-foreground line-through mr-1">
-                              {formatBRL(priceBreakdown.original)}
-                            </span>
-                          )}
-                          {formatBRL(priceBreakdown.total)}
-                        </span>
+                        <span className="font-bold text-lg">{formatBRL(priceBreakdown.total)}</span>
                       </div>
                       <Button
                         onClick={() => setStep(2)}
@@ -428,16 +380,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
           {step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-              {priceBreakdown.comboApplied && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/15 border border-primary">
-                  <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="text-xs">
-                    <p className="font-bold text-primary">Combo aplicado: 2 aulas por R$39,90</p>
-                    <p className="text-muted-foreground">Você economizou {formatBRL(priceBreakdown.savings)}</p>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-2">
                 {cart.map((c) => {
                   const dayLabel = weekdays.find((d) => d.date === c.occurrence.date)?.label || c.occurrence.date;
@@ -462,18 +404,6 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
               </div>
 
               <div className="border-t border-border pt-3 space-y-1">
-                {priceBreakdown.comboApplied && (
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Subtotal sem promo</span>
-                    <span className="line-through">{formatBRL(priceBreakdown.original)}</span>
-                  </div>
-                )}
-                {priceBreakdown.savings > 0 && (
-                  <div className="flex justify-between text-xs text-primary">
-                    <span>Economia</span>
-                    <span>− {formatBRL(priceBreakdown.savings)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-bold text-lg pt-1">
                   <span>Total</span>
                   <span>{formatBRL(priceBreakdown.total)}</span>

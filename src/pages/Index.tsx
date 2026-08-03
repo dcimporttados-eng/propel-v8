@@ -8,7 +8,6 @@ import TestimonialsSection from "@/components/TestimonialsSection";
 import CTASection from "@/components/CTASection";
 import ContactSection from "@/components/ContactSection";
 import ConsultationModal from "@/components/ConsultationModal";
-import PromoBanner from "@/components/PromoBanner";
 
 const Index = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -22,7 +21,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <PromoBanner onScheduleClick={() => openSchedule()} />
       <Navbar onScheduleClick={() => openSchedule()} onConsultClick={() => setConsultOpen(true)} />
       <HeroSection onScheduleClick={() => openSchedule()} />
       <TrainingCards onScheduleClick={openSchedule} />

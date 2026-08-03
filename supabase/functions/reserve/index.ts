@@ -6,16 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Promo "Combo 2 aulas por R$39,90" — válida até 01/07/2026
-const PROMO_START = "2026-04-29";
-const PROMO_END = "2026-07-01";
-const COMBO_PRICE_CENTS = 3990; // R$39,90 total para 2 aulas
 const REGULAR_PRICE_CENTS = 2990; // R$29,90 por aula
-
-function isPromoActive(today = new Date()): boolean {
-  const iso = today.toISOString().slice(0, 10);
-  return iso >= PROMO_START && iso <= PROMO_END;
-}
 
 interface CartItem {
   class_id: string;
@@ -115,26 +106,9 @@ Deno.serve(async (req) => {
     }
 
     // ===== Cálculo de preço (server-side, fonte da verdade) =====
-    // Regra: combo R$39,90 nas 2 aulas mais baratas se houver 2+ itens e promo ativa.
-    // Demais aulas: R$29,90 cada.
-    const promoActive = isPromoActive();
-    const sortedByPriceAsc = [...enriched].sort(
-      (a, b) => (a.classData.price || REGULAR_PRICE_CENTS) - (b.classData.price || REGULAR_PRICE_CENTS)
-    );
-    const comboIds = new Set<string>();
     let totalCents = 0;
-    if (promoActive && enriched.length >= 2) {
-      // 2 mais baratas viram combo
-      comboIds.add(`${sortedByPriceAsc[0].item.class_id}_${sortedByPriceAsc[0].item.class_date || ""}`);
-      comboIds.add(`${sortedByPriceAsc[1].item.class_id}_${sortedByPriceAsc[1].item.class_date || ""}`);
-      totalCents += COMBO_PRICE_CENTS;
-      for (let i = 2; i < sortedByPriceAsc.length; i++) {
-        totalCents += sortedByPriceAsc[i].classData.price || REGULAR_PRICE_CENTS;
-      }
-    } else {
-      for (const e of enriched) {
-        totalCents += e.classData.price || REGULAR_PRICE_CENTS;
-      }
+    for (const e of enriched) {
+      totalCents += e.classData.price || REGULAR_PRICE_CENTS;
     }
 
     // Create or find user
@@ -158,14 +132,13 @@ Deno.serve(async (req) => {
       userId = newUser.id;
     }
 
-    // Cria N reservas pendentes — marca combo_aplicado nas que entraram no combo
+    // Cria N reservas pendentes
     const rowsToInsert = enriched.map((e) => {
-      const key = `${e.item.class_id}_${e.item.class_date || ""}`;
       const row: Record<string, unknown> = {
         user_id: userId,
         class_id: e.item.class_id,
         status: "pending",
-        combo_aplicado: comboIds.has(key),
+        combo_aplicado: false,
       };
       if (e.item.class_date) row.class_date = e.item.class_date;
       return row;
@@ -187,12 +160,9 @@ Deno.serve(async (req) => {
     // Create Asaas Checkout (com split de R$1,00 fixo para a conta do Pavilhão 8)
     const totalDecimal = totalCents / 100;
 
-    const isCombo = promoActive && enriched.length >= 2;
-    const itemsTitle = isCombo
-      ? `Combo 2 aulas + ${enriched.length - 2} avulsa(s)`.replace(" + 0 avulsa(s)", "")
-      : enriched.length === 1
-        ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
-        : `${enriched.length} aulas — Pavilhão 8`;
+    const itemsTitle = enriched.length === 1
+      ? `${enriched[0].classData.title} — ${enriched[0].item.class_date || ""}`
+      : `${enriched.length} aulas — Pavilhão 8`;
 
     // Data(s)/horário(s) da(s) aula(s) reservada(s), pra aparecer na descrição da cobrança na Asaas
     const scheduleDesc = enriched
@@ -282,7 +252,7 @@ Deno.serve(async (req) => {
         checkout_url: checkoutUrl,
         class_title: itemsTitle,
         total_cents: totalCents,
-        combo_applied: isCombo,
+        combo_applied: false,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
