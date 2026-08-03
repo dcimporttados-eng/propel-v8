@@ -67,17 +67,8 @@ const ContactSection = () => {
             </p>
             <AdminDashboard />
           </div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Sistema desenvolvido por{" "}
-            <a
-              href="https://djonatanvargas.com.br/bio"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary font-semibold hover:underline"
-            >
-              Djonatan Vargas
-            </a>
-          </p>
+          {/* Crédito do desenvolvedor agora é fixo na viewport (DeveloperCredit),
+              visível em qualquer parte do site — não repetimos aqui. */}
         </div>
       </div>
     </section>

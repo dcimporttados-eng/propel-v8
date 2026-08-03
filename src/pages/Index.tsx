@@ -8,6 +8,7 @@ import TestimonialsSection from "@/components/TestimonialsSection";
 import CTASection from "@/components/CTASection";
 import ContactSection from "@/components/ContactSection";
 import ConsultationModal from "@/components/ConsultationModal";
+import DeveloperCredit from "@/components/DeveloperCredit";
 
 const Index = () => {
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -34,6 +35,7 @@ const Index = () => {
         initialModality={initialModality}
       />
       <ConsultationModal open={consultOpen} onOpenChange={setConsultOpen} />
+      <DeveloperCredit />
     </div>
   );
 };
