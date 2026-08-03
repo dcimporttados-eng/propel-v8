@@ -4,6 +4,7 @@ import {
   DEFAULT_PRICE_CENTS,
   MAX_ITEMS_PER_ORDER,
   ORDER_TTL_MINUTES,
+  buildChargeDescription,
   computeClientSplitCents,
   getDiscountPercent,
 } from "../_shared/campaign.ts";
@@ -178,19 +179,21 @@ Deno.serve(async (req) => {
       ? `${classMap.get(items[0].class_id)?.title || "Aula"} — ${items[0].class_date}`
       : `${items.length} aulas — Pavilhão 8`;
 
-    const scheduleDesc = items
+    const schedule = items
       .map((it) => {
         const [y, m, d] = (it.class_date || "").split("-");
         const dateBr = y && m && d ? `${d}/${m}` : "";
         const time = ((classMap.get(it.class_id)?.time as string) || "").slice(0, 5);
         return `${dateBr} ${time}`.trim();
       })
-      .filter(Boolean)
-      .join(", ");
+      .filter(Boolean);
 
-    const discountSuffix = order.discount_percent > 0
-      ? ` (${order.items_count} aulas — ${order.discount_percent}% OFF)`
-      : "";
+    // A Asaas limita description a 150 caracteres — o helper compacta se preciso.
+    const chargeDescription = buildChargeDescription(schedule, {
+      customerName: normalizedName,
+      itemsCount: order.items_count,
+      discountPercent: order.discount_percent,
+    });
 
     // ===== Checkout Asaas =====
     // A Asaas desconta a taxa dela ANTES dos splits e só sabemos qual taxa será
@@ -214,8 +217,7 @@ Deno.serve(async (req) => {
         items: [
           {
             name: itemsTitle,
-            description:
-              `Reserva Pavilhão 8 — ${normalizedName}${scheduleDesc ? ` — ${scheduleDesc}` : ""}${discountSuffix}`,
+            description: chargeDescription,
             quantity: 1,
             value: totalCents / 100,
           },

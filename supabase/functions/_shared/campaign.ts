@@ -81,6 +81,40 @@ export function computeClientSplitCents(totalCents: number, itemsCount: number, 
   return Math.max(0, totalCents - agencyFee - feeReserve);
 }
 
+/** Limite da Asaas para description de item/cobrança. */
+export const ASAAS_DESCRIPTION_MAX = 150;
+
+/**
+ * Monta a descrição da cobrança respeitando o limite da Asaas.
+ * Com muitas aulas a lista de datas estoura 150 caracteres, então caímos para
+ * uma forma compacta antes de truncar — o cliente sempre entende o que comprou.
+ */
+export function buildChargeDescription(
+  schedule: string[],
+  opts: { customerName?: string; itemsCount: number; discountPercent?: number } = { itemsCount: 0 },
+): string {
+  const prefix = "Reserva Pavilhão 8";
+  const who = opts.customerName ? ` — ${opts.customerName}` : "";
+  const off = opts.discountPercent && opts.discountPercent > 0
+    ? ` (${opts.itemsCount} aulas — ${opts.discountPercent}% OFF)`
+    : "";
+
+  const full = `${prefix}${who}${schedule.length ? ` — ${schedule.join(", ")}` : ""}${off}`;
+  if (full.length <= ASAAS_DESCRIPTION_MAX) return full;
+
+  // Sem o nome do cliente
+  const noName = `${prefix}${schedule.length ? ` — ${schedule.join(", ")}` : ""}${off}`;
+  if (noName.length <= ASAAS_DESCRIPTION_MAX) return noName;
+
+  // Só a contagem e o período
+  const first = schedule[0] || "";
+  const last = schedule[schedule.length - 1] || "";
+  const compact = `${prefix} — ${opts.itemsCount} aulas${first ? ` (${first} a ${last})` : ""}${off}`;
+  if (compact.length <= ASAAS_DESCRIPTION_MAX) return compact;
+
+  return compact.slice(0, ASAAS_DESCRIPTION_MAX);
+}
+
 /** A campanha está valendo nesta data? */
 export function isCampaignActive(today = new Date()): boolean {
   if (!CAMPAIGN.active) return false;

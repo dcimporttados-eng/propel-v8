@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildChargeDescription } from "../_shared/campaign.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -249,7 +250,7 @@ async function updateAsaasDescription(
       .select("class_date, classes(time)")
       .eq("order_id", orderId);
 
-    const scheduleDesc = (rows || [])
+    const schedule = (rows || [])
       // deno-lint-ignore no-explicit-any
       .map((r: any) => {
         const [y, m, d] = (r.class_date || "").split("-");
@@ -257,15 +258,16 @@ async function updateAsaasDescription(
         const time = (r.classes?.time || "").slice(0, 5);
         return `${dateBr} ${time}`.trim();
       })
-      .filter(Boolean)
-      .join(", ");
+      .filter(Boolean);
 
-    if (!scheduleDesc) return;
+    if (schedule.length === 0) return;
+    // Respeita o limite de 150 caracteres da Asaas.
+    const description = buildChargeDescription(schedule, { itemsCount: schedule.length });
 
     const resp = await fetch(`${asaasBaseUrl}/payments/${transactionId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", access_token: asaasApiKey },
-      body: JSON.stringify({ description: `Reserva Pavilhão 8 — ${scheduleDesc}` }),
+      body: JSON.stringify({ description }),
     });
     if (!resp.ok) console.error("Erro ao atualizar descrição na Asaas:", await resp.text());
   } catch (e) {
