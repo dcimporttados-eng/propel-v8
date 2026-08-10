@@ -48,36 +48,46 @@ export const ORDER_TTL_MINUTES = 30;
 export const AGENCY_FEE_CENTS_PER_ITEM = 70;
 
 /**
- * Estimativa da taxa que a Asaas retém ANTES de aplicar os splits.
- * A taxa real só é conhecida quando o cliente escolhe o meio de pagamento,
- * depois do checkout já criado — então reservamos o pior caso entre os meios
- * habilitados. O que sobrar da reserva fica com a agência.
+ * Taxas da Asaas. Cada meio de pagamento é cobrado num fluxo separado (Pix vai
+ * direto pela API de pagamentos, cartão continua no Checkout hospedado), então
+ * o split é calculado com a taxa exata do meio escolhido — sem reserva de
+ * "pior caso" nem sobra para a agência.
  */
 export const ASAAS_FEE_MODEL = {
-  /** Pix: taxa fixa. */
+  /** Pix: taxa fixa, conhecida antes de criar a cobrança. */
   pixFixedCents: 99,
   /** Cartão: percentual sobre o valor + parcela fixa. */
   cardPercent: 0.0299,
   cardFixedCents: 49,
-  /** Margem extra de segurança sobre a estimativa. */
+  /** Margem extra de segurança sobre a estimativa (só usada no fluxo de cartão, que ainda não sabe o meio até o cliente escolher). */
   safetyMarginCents: 30,
 };
 
-/** Pior caso de taxa (em centavos) para um total de pedido. */
-export function estimateWorstCaseFeeCents(totalCents: number): number {
-  const pix = ASAAS_FEE_MODEL.pixFixedCents;
+/**
+ * Split exato para pagamento via Pix (fluxo direto, fora do Checkout).
+ * A taxa do Pix é fixa e conhecida antes de criar a cobrança, então a
+ * comissão da agência fecha sempre em AGENCY_FEE_CENTS_PER_ITEM exato.
+ */
+export function computeExactPixSplitCents(totalCents: number, itemsCount: number): number {
+  const agencyFee = AGENCY_FEE_CENTS_PER_ITEM * itemsCount;
+  return Math.max(0, totalCents - agencyFee - ASAAS_FEE_MODEL.pixFixedCents);
+}
+
+/** Pior caso de taxa de cartão (em centavos) para um total de pedido. */
+export function estimateCardWorstCaseFeeCents(totalCents: number): number {
   const card = Math.ceil(totalCents * ASAAS_FEE_MODEL.cardPercent) + ASAAS_FEE_MODEL.cardFixedCents;
-  return Math.max(pix, card) + ASAAS_FEE_MODEL.safetyMarginCents;
+  return card + ASAAS_FEE_MODEL.safetyMarginCents;
 }
 
 /**
- * Valor do split destinado à conta da cliente (academia), em centavos.
- * O restante (comissão + sobra da taxa estimada) permanece na conta dona da
- * API key, que é a da agência.
+ * Valor do split destinado à conta da cliente (academia) no Checkout de
+ * cartão. A taxa real do cartão só é conhecida depois que a Asaas processa o
+ * pagamento (varia com parcelamento), então reservamos o pior caso; o que
+ * sobrar da reserva fica com a agência.
  */
-export function computeClientSplitCents(totalCents: number, itemsCount: number, feeInflation = 0): number {
+export function computeCardSplitCents(totalCents: number, itemsCount: number, feeInflation = 0): number {
   const agencyFee = AGENCY_FEE_CENTS_PER_ITEM * itemsCount;
-  const feeReserve = estimateWorstCaseFeeCents(totalCents) + feeInflation;
+  const feeReserve = estimateCardWorstCaseFeeCents(totalCents) + feeInflation;
   return Math.max(0, totalCents - agencyFee - feeReserve);
 }
 

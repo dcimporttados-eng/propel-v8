@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, X, Tag } from "lucide-react";
+import { Clock, Users, Loader2, ExternalLink, ChevronLeft, ChevronRight, X, Tag, QrCode, CreditCard } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -94,6 +94,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const [submitting, setSubmitting] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [checkoutUrl, setCheckoutUrl] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CREDIT_CARD">("PIX");
   const [weekdays, setWeekdays] = useState<{ date: string; dayOfWeek: number; label: string }[]>([]);
   const [weekIndex, setWeekIndex] = useState(0);
 
@@ -145,6 +146,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     setForm({ name: "", phone: "", email: "", cpfCnpj: "", postalCode: "", address: "", addressNumber: "", complement: "", province: "" });
     setSelectedDay("");
     setCheckoutUrl("");
+    setPaymentMethod("PIX");
     setWeekIndex(0);
     onOpenChange(false);
   };
@@ -213,6 +215,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
           addressNumber: form.addressNumber,
           complement: form.complement,
           province: form.province,
+          paymentMethod,
         },
       });
 
@@ -531,6 +534,33 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 <div>
                   <Label htmlFor="complement">Complemento (opcional)</Label>
                   <Input id="complement" value={form.complement} onChange={(e) => setForm({ ...form, complement: e.target.value })} placeholder="Apto, bloco, etc." className="bg-secondary border-border mt-1" maxLength={100} />
+                </div>
+                <div>
+                  <Label>Forma de pagamento</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("PIX")}
+                      className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-colors ${
+                        paymentMethod === "PIX"
+                          ? "bg-primary/15 border-primary text-primary"
+                          : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4" /> Pix
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("CREDIT_CARD")}
+                      className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-colors ${
+                        paymentMethod === "CREDIT_CARD"
+                          ? "bg-primary/15 border-primary text-primary"
+                          : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4" /> Cartão
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" disabled={submitting} className="w-full bg-gradient-primary text-primary-foreground font-bold rounded-full py-6 hover:scale-[1.02] transition-transform">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processando...</> : <>Reservar e pagar {formatBRL(priceBreakdown.totalCents)} <ExternalLink className="w-4 h-4 ml-2" /></>}

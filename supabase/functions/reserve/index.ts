@@ -5,7 +5,8 @@ import {
   MAX_ITEMS_PER_ORDER,
   ORDER_TTL_MINUTES,
   buildChargeDescription,
-  computeClientSplitCents,
+  computeCardSplitCents,
+  computeExactPixSplitCents,
   getDiscountPercent,
 } from "../_shared/campaign.ts";
 
@@ -64,6 +65,7 @@ Deno.serve(async (req) => {
 
     const payload = await req.json();
     const { name, email, phone, cpfCnpj, postalCode, address, addressNumber, complement, province } = payload;
+    const paymentMethod = payload.paymentMethod === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX";
 
     const normalizedName = typeof name === "string" ? name.trim() : "";
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -195,90 +197,169 @@ Deno.serve(async (req) => {
       discountPercent: order.discount_percent,
     });
 
-    // ===== Checkout Asaas =====
-    // A Asaas desconta a taxa dela ANTES dos splits e só sabemos qual taxa será
-    // aplicada depois que o cliente escolhe o meio de pagamento. Reservamos o
-    // pior caso; se ainda assim a Asaas recusar, tentamos de novo com uma
-    // reserva maior em vez de falhar o pedido inteiro.
-    const buildCheckoutPayload = (feeInflationCents: number) => {
-      const clientSplitCents = computeClientSplitCents(totalCents, order.items_count, feeInflationCents);
-      const splits = clientSplitCents > 0
-        ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitCents / 100 }]
-        : [];
-      return {
-        billingTypes: ["PIX", "CREDIT_CARD"],
-        chargeTypes: ["DETACHED"],
-        minutesToExpire: ORDER_TTL_MINUTES,
-        callback: {
-          successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
-          cancelUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=failed`,
-          expiredUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=pending`,
-        },
-        items: [
-          {
-            name: itemsTitle,
-            description: chargeDescription,
-            quantity: 1,
-            value: totalCents / 100,
-          },
-        ],
-        customerData: {
-          name: normalizedName,
-          email: normalizedEmail,
-          phone: normalizedPhone,
-          cpfCnpj: normalizedCpfCnpj,
-          postalCode: normalizedPostalCode,
-          address: normalizedAddress,
-          addressNumber: normalizedAddressNumber,
-          complement: normalizedComplement || undefined,
-          province: normalizedProvince,
-        },
-        splits,
-        // Só o ID do pedido: o webhook resolve as reservas a partir dele.
-        externalReference: order.order_id,
-      };
-    };
+    // ===== Cobrança Asaas =====
+    // Pix: cobrança direta pela API de pagamentos, com a taxa fixa e conhecida
+    // de antemão — o split fecha exato, sem sobra pra agência.
+    // Cartão: continua no Checkout hospedado da Asaas (dados do cartão nunca
+    // passam pelo nosso servidor); a taxa real só é conhecida depois do
+    // pagamento, então reservamos o pior caso e retentamos com folga maior se
+    // a Asaas recusar o split.
+    let checkoutUrl: string | null = null;
+    let asaasTxId: string | null = null;
 
-    let asaasData: Record<string, unknown> | null = null;
-    for (const inflation of [0, 300, 1000]) {
-      const resp = await fetch(`${asaasBaseUrl}/checkouts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", access_token: asaasApiKey },
-        body: JSON.stringify(buildCheckoutPayload(inflation)),
-      });
+    if (paymentMethod === "PIX") {
+      const asaasHeaders = { "Content-Type": "application/json", access_token: asaasApiKey };
 
-      if (resp.ok) {
-        asaasData = await resp.json();
-        break;
+      // Busca ou cria o cliente na Asaas (a API de pagamento direto exige um customer ID).
+      const searchResp = await fetch(
+        `${asaasBaseUrl}/customers?cpfCnpj=${normalizedCpfCnpj}`,
+        { headers: asaasHeaders },
+      );
+      const searchData = searchResp.ok ? await searchResp.json() : { data: [] };
+      let customerId = (searchData.data && searchData.data[0]?.id) as string | undefined;
+
+      if (!customerId) {
+        const customerResp = await fetch(`${asaasBaseUrl}/customers`, {
+          method: "POST",
+          headers: asaasHeaders,
+          body: JSON.stringify({
+            name: normalizedName,
+            email: normalizedEmail,
+            phone: normalizedPhone,
+            cpfCnpj: normalizedCpfCnpj,
+            postalCode: normalizedPostalCode,
+            address: normalizedAddress,
+            addressNumber: normalizedAddressNumber,
+            complement: normalizedComplement || undefined,
+            province: normalizedProvince,
+          }),
+        });
+        if (!customerResp.ok) {
+          console.error("Asaas customer create error:", await customerResp.text());
+        } else {
+          const customerData = await customerResp.json();
+          customerId = customerData.id as string;
+        }
       }
 
-      const errBody = await resp.text();
-      console.error(`Asaas checkout error ${resp.status} (inflation=${inflation}): ${errBody}`);
-      // Só vale repetir quando o split estourou o líquido; outros erros são finais.
-      if (!errBody.includes("Split")) break;
+      if (customerId) {
+        const clientSplitCents = computeExactPixSplitCents(totalCents, order.items_count);
+        const splits = clientSplitCents > 0
+          ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitCents / 100 }]
+          : [];
+        const dueDate = new Date().toISOString().slice(0, 10);
+
+        const paymentResp = await fetch(`${asaasBaseUrl}/payments`, {
+          method: "POST",
+          headers: asaasHeaders,
+          body: JSON.stringify({
+            customer: customerId,
+            billingType: "PIX",
+            value: totalCents / 100,
+            dueDate,
+            description: chargeDescription,
+            splits,
+            externalReference: order.order_id,
+            callback: {
+              successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
+              autoRedirect: true,
+            },
+          }),
+        });
+
+        if (paymentResp.ok) {
+          const paymentData = await paymentResp.json();
+          checkoutUrl = paymentData.invoiceUrl as string;
+          asaasTxId = paymentData.id as string;
+        } else {
+          console.error("Asaas Pix payment error:", await paymentResp.text());
+        }
+      }
+    } else {
+      const buildCheckoutPayload = (feeInflationCents: number) => {
+        const clientSplitCents = computeCardSplitCents(totalCents, order.items_count, feeInflationCents);
+        const splits = clientSplitCents > 0
+          ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitCents / 100 }]
+          : [];
+        return {
+          billingTypes: ["CREDIT_CARD"],
+          chargeTypes: ["DETACHED"],
+          minutesToExpire: ORDER_TTL_MINUTES,
+          callback: {
+            successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
+            cancelUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=failed`,
+            expiredUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=pending`,
+          },
+          items: [
+            {
+              name: itemsTitle,
+              description: chargeDescription,
+              quantity: 1,
+              value: totalCents / 100,
+            },
+          ],
+          customerData: {
+            name: normalizedName,
+            email: normalizedEmail,
+            phone: normalizedPhone,
+            cpfCnpj: normalizedCpfCnpj,
+            postalCode: normalizedPostalCode,
+            address: normalizedAddress,
+            addressNumber: normalizedAddressNumber,
+            complement: normalizedComplement || undefined,
+            province: normalizedProvince,
+          },
+          splits,
+          // Só o ID do pedido: o webhook resolve as reservas a partir dele.
+          externalReference: order.order_id,
+        };
+      };
+
+      let asaasData: Record<string, unknown> | null = null;
+      for (const inflation of [0, 300, 1000]) {
+        const resp = await fetch(`${asaasBaseUrl}/checkouts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", access_token: asaasApiKey },
+          body: JSON.stringify(buildCheckoutPayload(inflation)),
+        });
+
+        if (resp.ok) {
+          asaasData = await resp.json();
+          break;
+        }
+
+        const errBody = await resp.text();
+        console.error(`Asaas checkout error ${resp.status} (inflation=${inflation}): ${errBody}`);
+        // Só vale repetir quando o split estourou o líquido; outros erros são finais.
+        if (!errBody.includes("Split")) break;
+      }
+
+      if (asaasData) {
+        checkoutUrl = (asaasData.link || asaasData.url || asaasData.checkoutUrl) as string;
+        asaasTxId = asaasData.id as string;
+      }
     }
 
-    if (!asaasData) {
+    if (!checkoutUrl) {
       // Libera as vagas na hora, sem esperar a expiração.
       await supabase.from("reservations").update({ status: "canceled" }).eq("order_id", order.order_id);
       await supabase.from("booking_orders")
-        .update({ status: "canceled", notes: "Falha ao criar checkout na Asaas" })
+        .update({ status: "canceled", notes: "Falha ao criar cobrança na Asaas" })
         .eq("id", order.order_id);
       createdOrderId = null;
       return json({ error: "Erro ao gerar link de pagamento" }, 502);
     }
 
-    const checkoutUrl = (asaasData.link || asaasData.url || asaasData.checkoutUrl) as string;
-    console.log(`Order ${order.order_id}: checkout ${asaasData.id} — ${checkoutUrl}`);
+    console.log(`Order ${order.order_id}: ${paymentMethod} tx ${asaasTxId} — ${checkoutUrl}`);
 
-    // Plano B do webhook: a Asaas nem sempre propaga o externalReference da
-    // CheckoutSession para o Payment gerado.
-    if (asaasData.id) {
+    // Plano B do webhook: usado sobretudo pelo Checkout de cartão, que às
+    // vezes não propaga o externalReference para o Payment gerado.
+    if (paymentMethod === "CREDIT_CARD" && asaasTxId) {
       await supabase.from("booking_orders")
-        .update({ asaas_checkout_id: asaasData.id as string })
+        .update({ asaas_checkout_id: asaasTxId })
         .eq("id", order.order_id);
       await supabase.from("reservations")
-        .update({ asaas_checkout_id: asaasData.id as string })
+        .update({ asaas_checkout_id: asaasTxId })
         .eq("order_id", order.order_id);
     }
 
