@@ -565,6 +565,18 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
             </motion.div>
           )}
         </AnimatePresence>
+
+        <p className="text-center text-[10px] text-muted-foreground pt-2">
+          Sistema desenvolvido por{" "}
+          <a
+            href="https://djonatanvargas.com.br/bio"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-primary hover:underline"
+          >
+            Djonatan Vargas
+          </a>
+        </p>
       </DialogContent>
     </Dialog>
   );
