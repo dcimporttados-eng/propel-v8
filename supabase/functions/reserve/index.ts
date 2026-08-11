@@ -260,10 +260,10 @@ Deno.serve(async (req) => {
             description: chargeDescription,
             splits,
             externalReference: order.order_id,
-            callback: {
-              successUrl: `https://pavilhao8.com.br/confirmacao?src=${reservationIds[0]}&status=approved`,
-              autoRedirect: true,
-            },
+            // A Asaas exige domínio cadastrado em "Minha Conta" pra aceitar
+            // callback/autoRedirect na API de pagamento direto — sem isso ela
+            // recusa a cobrança inteira. A confirmação da reserva não depende
+            // disso (o webhook já cuida), então deixamos de fora por ora.
           }),
         });
 
