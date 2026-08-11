@@ -232,6 +232,9 @@ Deno.serve(async (req) => {
             addressNumber: normalizedAddressNumber,
             complement: normalizedComplement || undefined,
             province: normalizedProvince,
+            // Evita SMS/WhatsApp cobrados pela Asaas — as notificações de
+            // status ficam por conta do nosso Telegram/webhook.
+            notificationDisabled: true,
           }),
         });
         if (!customerResp.ok) {
