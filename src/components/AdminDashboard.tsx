@@ -139,10 +139,16 @@ const AdminDashboard = () => {
       supabase.from("classes").select("*").order("time", { ascending: true }),
       supabase.from("class_suspensions").select("*").order("suspended_date", { ascending: true }),
     ]);
-    if (templatesRes.data) setTemplates((templatesRes.data as ClassTemplate[]).filter((t) => t.capacity > 0));
+    // O admin precisa ver TODAS as aulas, inclusive as desativadas (Vagas = 0)
+    // — senão uma aula zerada some do painel e nunca mais pode ser reativada.
+    // Onde só fazem sentido aulas ativas (grade semanal, dropdowns), usamos
+    // activeTemplates.
+    if (templatesRes.data) setTemplates(templatesRes.data as ClassTemplate[]);
     if (suspensionsRes.data) setSuspensions(suspensionsRes.data as Suspension[]);
     setLoading(false);
   };
+
+  const activeTemplates = templates.filter((t) => t.capacity > 0);
 
   const fetchReservations = async () => {
     setLoadingReservations(true);
@@ -705,7 +711,7 @@ const AdminDashboard = () => {
                     return groups.map((g) => (
                       <div key={g.day} className="space-y-2">
                         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">
-                          {g.day === 0 ? "Todos os dias (Seg-Sáb)" : DAY_NAMES[g.day]}
+                          {g.day === 0 ? "Todos os dias (Seg-Sáb)" : DAY_NAMES[g.day] || `Dia inválido (${g.day}) — corrija o dia da semana`}
                         </h4>
                         {g.items.map((t) => {
                           const expanded = expandedClassId === t.id;
@@ -862,7 +868,7 @@ const AdminDashboard = () => {
                           required
                         >
                           <option value="">Selecione...</option>
-                          {templates.map((t) => (
+                          {activeTemplates.map((t) => (
                             <option key={t.id} value={t.id}>
                               {t.title} — {t.time?.slice(0, 5)} ({t.day_of_week ? DAY_NAMES[t.day_of_week] : "Seg-Sáb"})
                             </option>
@@ -904,7 +910,7 @@ const AdminDashboard = () => {
 
               {activeTab === "weekly" && (() => {
                 const weekDates = getWeekDates(weekOffset);
-                const uniqueTimes = [...new Set(templates.map((t) => t.time?.slice(0, 5)))].sort();
+                const uniqueTimes = [...new Set(activeTemplates.map((t) => t.time?.slice(0, 5)))].sort();
                 const cellStudents = selectedCell ? (weeklyReservations.get(`${selectedCell.classId}_${selectedCell.date}`) || []) : [];
 
                 return (
@@ -946,7 +952,7 @@ const AdminDashboard = () => {
                               <tr key={time} className="border-t border-border">
                                 <td className="p-2 text-muted-foreground font-mono">{time}</td>
                                 {weekDates.map((d) => {
-                                  const cls = templates.find((t) => t.time?.slice(0, 5) === time && (!t.day_of_week || t.day_of_week === d.dow));
+                                  const cls = activeTemplates.find((t) => t.time?.slice(0, 5) === time && (!t.day_of_week || t.day_of_week === d.dow));
                                   if (!cls) return <td key={d.date} className="p-1" />;
 
                                   const key = `${cls.id}_${d.date}`;
@@ -1054,7 +1060,7 @@ const AdminDashboard = () => {
                                         className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs"
                                       >
                                         <option value="">Novo horário...</option>
-                                        {[...templates]
+                                        {[...activeTemplates]
                                           .sort((a, b) => (a.day_of_week ?? 0) - (b.day_of_week ?? 0) || (a.time || "").localeCompare(b.time || ""))
                                           .map((t) => (
                                             <option key={t.id} value={t.id}>
@@ -1135,7 +1141,7 @@ const AdminDashboard = () => {
                             required
                           >
                             <option value="">Selecione...</option>
-                            {templates
+                            {activeTemplates
                               .filter((t) => {
                                 if (!manualForm.classDate) return true;
                                 const selectedDay = new Date(`${manualForm.classDate}T12:00:00`).getDay();
@@ -1202,7 +1208,7 @@ const AdminDashboard = () => {
                         className="w-full h-9 mt-1 rounded-md border border-border bg-secondary px-3 text-sm text-foreground"
                       >
                         <option value="">Todas as aulas</option>
-                        {templates
+                        {activeTemplates
                           .filter((t) => {
                             if (!filterDate) return true;
                             const selectedDay = new Date(`${filterDate}T12:00:00`).getDay();
