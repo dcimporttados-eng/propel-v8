@@ -54,8 +54,14 @@ export const AGENCY_FEE_CENTS_PER_ITEM = 70;
  * "pior caso" nem sobra para a agência.
  */
 export const ASAAS_FEE_MODEL = {
-  /** Pix: taxa fixa, conhecida antes de criar a cobrança. */
-  pixFixedCents: 99,
+  /**
+   * Pix: taxa fixa, conhecida antes de criar a cobrança.
+   * Era R$0,99 (promocional) até ago/2026; passou a R$1,99 em set/2026.
+   * Se a Asaas mudar de novo, o reserve se auto-ajusta: ele lê o "valor a
+   * receber" informado no erro de split e recalcula — este valor aqui é só
+   * o palpite da primeira tentativa.
+   */
+  pixFixedCents: 199,
   /** Cartão: percentual sobre o valor + parcela fixa. */
   cardPercent: 0.0299,
   cardFixedCents: 49,

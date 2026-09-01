@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  AGENCY_FEE_CENTS_PER_ITEM,
   CAMPAIGN,
   DEFAULT_PRICE_CENTS,
   MAX_ITEMS_PER_ORDER,
@@ -246,36 +247,58 @@ Deno.serve(async (req) => {
       }
 
       if (customerId) {
-        const clientSplitCents = computeExactPixSplitCents(totalCents, order.items_count);
-        const splits = clientSplitCents > 0
-          ? [{ walletId: asaasClientWalletId, fixedValue: clientSplitCents / 100 }]
-          : [];
         const dueDate = new Date().toISOString().slice(0, 10);
+        const createPixPayment = (splitCents: number) =>
+          fetch(`${asaasBaseUrl}/payments`, {
+            method: "POST",
+            headers: asaasHeaders,
+            body: JSON.stringify({
+              customer: customerId,
+              billingType: "PIX",
+              value: totalCents / 100,
+              dueDate,
+              description: chargeDescription,
+              splits: splitCents > 0
+                ? [{ walletId: asaasClientWalletId, fixedValue: splitCents / 100 }]
+                : [],
+              externalReference: order.order_id,
+              // A Asaas exige domínio cadastrado em "Minha Conta" pra aceitar
+              // callback/autoRedirect na API de pagamento direto — sem isso ela
+              // recusa a cobrança inteira. A confirmação da reserva não depende
+              // disso (o webhook já cuida), então deixamos de fora por ora.
+            }),
+          });
 
-        const paymentResp = await fetch(`${asaasBaseUrl}/payments`, {
-          method: "POST",
-          headers: asaasHeaders,
-          body: JSON.stringify({
-            customer: customerId,
-            billingType: "PIX",
-            value: totalCents / 100,
-            dueDate,
-            description: chargeDescription,
-            splits,
-            externalReference: order.order_id,
-            // A Asaas exige domínio cadastrado em "Minha Conta" pra aceitar
-            // callback/autoRedirect na API de pagamento direto — sem isso ela
-            // recusa a cobrança inteira. A confirmação da reserva não depende
-            // disso (o webhook já cuida), então deixamos de fora por ora.
-          }),
-        });
+        // 1ª tentativa com a taxa Pix do config. Se a Asaas recusar o split,
+        // ela mesma informa o "valor a receber" (total menos a taxa real) —
+        // recalculamos a partir dele e tentamos uma única vez mais. Assim uma
+        // mudança de taxa da Asaas não derruba as vendas.
+        let splitCents = computeExactPixSplitCents(totalCents, order.items_count);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const paymentResp = await createPixPayment(splitCents);
+          if (paymentResp.ok) {
+            const paymentData = await paymentResp.json();
+            checkoutUrl = paymentData.invoiceUrl as string;
+            asaasTxId = paymentData.id as string;
+            break;
+          }
 
-        if (paymentResp.ok) {
-          const paymentData = await paymentResp.json();
-          checkoutUrl = paymentData.invoiceUrl as string;
-          asaasTxId = paymentData.id as string;
-        } else {
-          console.error("Asaas Pix payment error:", await paymentResp.text());
+          const errText = await paymentResp.text();
+          console.error(`Asaas Pix payment error ${paymentResp.status}:`, errText);
+
+          const m = errText.match(/valor a receber[^R]*R\$\s*([\d.]*\d,\d{2})/);
+          if (attempt === 0 && m) {
+            const receivableCents = Math.round(
+              parseFloat(m[1].replace(/\./g, "").replace(",", ".")) * 100,
+            );
+            const adjusted = receivableCents - AGENCY_FEE_CENTS_PER_ITEM * order.items_count;
+            if (adjusted > 0 && adjusted !== splitCents) {
+              console.log(`Split Pix ajustado pela taxa real da Asaas: ${splitCents} -> ${adjusted} centavos`);
+              splitCents = adjusted;
+              continue;
+            }
+          }
+          break;
         }
       }
     } else {
