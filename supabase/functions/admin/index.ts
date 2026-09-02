@@ -97,6 +97,38 @@ Deno.serve(async (req) => {
         if (error) throw error;
         return json({ ok: true });
       }
+      // Suspende TODAS as aulas ativas de uma data (feriado, evento etc.).
+      // Reservas já feitas não são tocadas — a suspensão só tira o horário
+      // da vitrine de agendamento naquele dia.
+      case "suspend_day": {
+        const date = (payload as { date?: string }).date;
+        // Erros de negócio voltam com HTTP 200 + {error}: o supabase-js esconde
+        // o corpo em respostas 4xx (FunctionsHttpError genérico).
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return json({ error: "Data inválida (use YYYY-MM-DD)" });
+        }
+        // 0=Dom..6=Sáb no JS; o banco usa 1=Seg..6=Sáb
+        const jsDay = new Date(`${date}T12:00:00`).getDay();
+        if (jsDay === 0) return json({ error: "Domingo não tem aulas" });
+
+        const { data: classes, error: classErr } = await supabase
+          .from("classes")
+          .select("id, title, time")
+          .gt("capacity", 0)
+          .or(`day_of_week.is.null,day_of_week.eq.${jsDay}`);
+        if (classErr) throw classErr;
+        if (!classes || classes.length === 0) {
+          return json({ error: "Nenhuma aula ativa nesse dia da semana" });
+        }
+
+        const rows = classes.map((c) => ({ class_id: c.id, suspended_date: date }));
+        const { error: insErr } = await supabase
+          .from("class_suspensions")
+          .upsert(rows, { onConflict: "class_id,suspended_date", ignoreDuplicates: true });
+        if (insErr) throw insErr;
+
+        return json({ ok: true, suspended: classes.length });
+      }
 
       // ===== RESERVATIONS =====
       case "list_reservations": {

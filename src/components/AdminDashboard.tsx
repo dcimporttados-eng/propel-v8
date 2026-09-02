@@ -69,6 +69,8 @@ const AdminDashboard = () => {
   const [transferring, setTransferring] = useState(false);
   const [suspendDate, setSuspendDate] = useState("");
   const [suspendClassId, setSuspendClassId] = useState("");
+  const [suspendDayDate, setSuspendDayDate] = useState("");
+  const [suspendingDay, setSuspendingDay] = useState(false);
   const [filterDate, setFilterDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"confirmed" | "pending" | "all">("confirmed");
@@ -471,6 +473,35 @@ const AdminDashboard = () => {
     }
   };
 
+  // Fecha o dia inteiro (feriado etc.): suspende todas as aulas ativas da
+  // data. Reservas existentes não são alteradas — só bloqueia novas.
+  const handleSuspendDay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!suspendDayDate) {
+      toast.error("Escolha a data");
+      return;
+    }
+    const dayLabel = new Date(`${suspendDayDate}T12:00:00`).toLocaleDateString("pt-BR");
+    if (!confirm(`Fechar o dia ${dayLabel} inteiro? Todas as aulas desse dia ficarão indisponíveis para novas reservas. As reservas já feitas não são alteradas.`)) return;
+    setSuspendingDay(true);
+    try {
+      const res = await adminCall<{ ok?: boolean; suspended?: number; error?: string }>("suspend_day", {
+        date: suspendDayDate,
+      });
+      if (res?.ok) {
+        toast.success(`Dia ${dayLabel} fechado (${res.suspended} aula${res.suspended === 1 ? "" : "s"})`);
+        setSuspendDayDate("");
+        fetchData();
+      } else {
+        toast.error(res?.error || "Erro ao fechar o dia");
+      }
+    } catch (e) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "?"));
+    } finally {
+      setSuspendingDay(false);
+    }
+  };
+
   const handleUnsuspend = async (id: string) => {
     try {
       await adminCall("delete_suspension", { id });
@@ -854,6 +885,27 @@ const AdminDashboard = () => {
               {activeTab === "suspensions" && (
                 <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">Suspenda uma aula em uma data específica. Alunos não verão esse horário no dia suspenso.</p>
+
+                  {/* Fechar dia inteiro (feriado etc.) */}
+                  <form onSubmit={handleSuspendDay} className="p-4 bg-secondary rounded-xl border border-primary/40 space-y-3">
+                    <h3 className="font-semibold text-sm flex items-center gap-2"><Ban className="w-4 h-4 text-primary" /> Fechar dia inteiro</h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Suspende todas as aulas da data escolhida de uma vez (feriados, eventos).
+                      Reservas já feitas não são alteradas — só bloqueia novas reservas.
+                    </p>
+                    <div className="flex gap-3">
+                      <Input
+                        type="date"
+                        value={suspendDayDate}
+                        onChange={(e) => setSuspendDayDate(e.target.value)}
+                        className="bg-background border-border h-9 text-sm flex-1"
+                        required
+                      />
+                      <Button type="submit" disabled={suspendingDay} className="h-9 px-4 text-sm rounded-full bg-primary text-primary-foreground font-bold shrink-0">
+                        {suspendingDay ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Ban className="w-3.5 h-3.5 mr-1" /> Fechar dia</>}
+                      </Button>
+                    </div>
+                  </form>
 
                   {/* Add suspension */}
                   <form onSubmit={handleSuspend} className="p-4 bg-secondary rounded-xl border border-border space-y-3">

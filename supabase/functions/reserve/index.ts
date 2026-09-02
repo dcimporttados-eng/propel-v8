@@ -37,6 +37,10 @@ function friendlyError(message: string): { text: string; status: number } {
   if (message.includes("CLASS_DISABLED:")) {
     return { text: "Um dos horários escolhidos não está mais disponível.", status: 409 };
   }
+  if (message.includes("CLASS_SUSPENDED:")) {
+    const detail = message.split("CLASS_SUSPENDED:")[1]?.split("\n")[0]?.trim() || "";
+    return { text: `Aula suspensa nesta data: ${detail}. Escolha outro dia.`, status: 409 };
+  }
   if (message.includes("CLASS_NOT_FOUND")) return { text: "Aula não encontrada", status: 404 };
   if (message.includes("EMPTY_ORDER")) return { text: "Pedido sem itens", status: 400 };
   return { text: "Erro ao criar reserva", status: 500 };
